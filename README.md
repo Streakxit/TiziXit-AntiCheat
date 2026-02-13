@@ -1,12 +1,3 @@
-<div id="top">
-
-<p align="center">
-
-<picture>
-  <img alt="TiziXit Logo" src="https://i.imgur.com/QRlCrO3.png" width="60%">
-</picture>
-
-</p>
 
 <p align="center">
   <em>Desarrollado para la comunidad de Free Fire, por TiziXit.</em>
