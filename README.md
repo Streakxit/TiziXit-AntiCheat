@@ -13,6 +13,7 @@ El proyecto tiene como función principal facilitar el trabajo de los analistas 
 
 🟣 FACILIDAD: El scanner se ejecuta usando Termux, y con algunos comandos simples ya podrás utilizarlo sin problemas.
 
+<img src="https://i.imgur.com/NnWf7Fm.png" alt="line break" width="100%" height="3px">
 
 
 FUNCIONES DEL SCANNER 
