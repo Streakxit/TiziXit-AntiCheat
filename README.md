@@ -1,50 +1,71 @@
-# TiziXit-AntiCheat
+<div id="top">
 
-tiziSS es un scanner para dispositivos Android que tiene como objetivo reunir logs y archivos sospechosos en cuestión de segundos de uso.
+<p align="center">
 
+<picture>
+  <img alt="TiziXit Logo" src="https://i.imgur.com/QRlCrO3.png" width="60%">
+</picture>
 
-**¿POR QUE USAR TIZISS?**
+</p>
 
-El proyecto tiene como función principal facilitar el trabajo de los analistas en sus revisiones, ya que cuenta con varias funciones como:
+<p align="center">
+  <em>Desarrollado para la comunidad de Free Fire, por TiziXit.</em>
+</p>
 
-🔵 AUTOMATIZACIÓN: El scanner hace todo el trabajo pesado por ti, ahorrándote tiempo.
+</div>
 
-⚫️ LOGS SOSPECHOSOS: Reúne automáticamente logs de todos los posibles bypass.
+<img src="https://i.imgur.com/NnWf7Fm.png" width="100%" height="3px">
 
-🟣 FACILIDAD: El scanner se ejecuta usando Termux, y con algunos comandos simples ya podrás utilizarlo sin problemas.
+## Introducción
 
-<img src="https://i.imgur.com/NnWf7Fm.png" alt="line break" width="100%" height="3px">
+TiziXit es un scanner para dispositivos Android que tiene como objetivo reunir logs y archivos sospechosos en cuestión de segundos de uso.
 
+**¿Por qué usar TiziXit?**
 
-#FUNCIONES DEL SCANNER 
+El proyecto tiene como función principal facilitar el trabajo de los analistas en sus revisiones, ya que cuenta con múltiples funciones como:
 
-Verificación de instalación de Free Fire: Verifica si el juego está instalado.
+* **🔵 Automatización:** El scanner realiza todo el proceso automáticamente, ahorrando tiempo.
+* **⚫️ Logs sospechosos:** Reúne logs relacionados a posibles modificaciones o alteraciones.
+* **🟣 Facilidad:** Funciona mediante `Termux`, ejecutándose con simples comandos.
 
-Reinicio del dispositivo: Verifica si el dispositivo fue reiniciado hace menos de 60 minutos.
+<img src="https://i.imgur.com/NnWf7Fm.png" width="100%" height="3px">
 
-Versión de Android: Verifica la versión del sistema Android.
+## Detecciones
 
-Root: Verifica si el dispositivo tiene acceso root.
+| Detecciones | Descripción |
+|-------------|-------------|
+| `Verificación de instalación de Free Fire` | Comprueba si el juego está instalado |
+| `Reinicio del dispositivo` | Detecta si el dispositivo fue reiniciado hace menos de 60 minutos |
+| `Versión Android` | Verifica la versión del sistema |
+| `Root` | Detecta si el dispositivo tiene acceso root |
+| `Fecha y Hora` | Verifica alteraciones de fecha y hora |
+| `Passagem de Replay` | Detecta uso de replay |
+| `MTP` | Verifica si el MTP está activado |
+| `Shaders` | Detecta modificaciones gráficas |
+| `OBB` | Verifica alteraciones en archivos OBB |
 
-Fecha y hora: Verifica bypass de fecha y hora.
+<img src="https://i.imgur.com/NnWf7Fm.png" width="100%" height="3px">
 
-Pasaje de Replay: Verifica si el usuario utilizó replay.
+## Contribuciones
 
-MTP: Verifica si el MTP está activado.
+¡Las contribuciones son bienvenidas!  
+Contáctame por privado en Discord: `tizi_xit`
 
-Shaders: Verifica si el usuario realizó bypass usando wallhack/holograma.
+* 🐛 **Reporte un Problema:** ¿Encontraste un bug? Avísame.
+* 💬 **Haz una sugerencia:** ¿Tienes ideas? Me encantaría escucharlas.
 
-OBB: Verifica si el usuario realizó algún tipo de bypass en la OBB.
+<img src="https://i.imgur.com/NnWf7Fm.png" width="100%" height="3px">
 
+## Agradecimientos
 
-#CONTRIBUCIONES
-¡Las contribuciones son bienvenidas! Por favor contáctame por privado en Discord: tizi_xit.
+Un agradecimiento especial a:
 
-🐛 Reporta un problema: ¿Encontraste un bug? ¡Avísame!
+<div style="font-weight: bold; margin-bottom: 10px;">
+  Keller – mástergames – bruno – lkzin – finish
+</div>
 
-💬 Haz una sugerencia: ¿Tienes ideas o sugerencias? Me encantaría escucharte.
+<img src="https://i.imgur.com/NnWf7Fm.png" width="100%" height="3px">
 
-#AGRADECIMIENTOS
+## 🎗 Licencia
 
-Un gran agradecimiento a los siguientes miembros por su increíble trabajo y contribuciones sobre bypass:
-Keller – mástergames - bruno - lkzin - finish
+Copyright TiziXit © 2025-2030
