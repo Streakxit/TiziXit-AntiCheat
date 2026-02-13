@@ -52,7 +52,7 @@ Contáctame por privado en Discord: `tizi_xit`
 Un agradecimiento especial a:
 
 <div style="font-weight: bold; margin-bottom: 10px;">
-  Keller – mástergames – bruno – lkzin – finish
+  Keller 
 </div>
 
 <img src="https://i.imgur.com/NnWf7Fm.png" width="100%" height="3px">
