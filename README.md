@@ -3,7 +3,7 @@
 tiziSS es un scanner para dispositivos Android que tiene como objetivo reunir logs y archivos sospechosos en cuestión de segundos de uso.
 
 
-¿POR QUE USAR TIZISS?
+**¿POR QUE USAR TIZISS?**
 
 El proyecto tiene como función principal facilitar el trabajo de los analistas en sus revisiones, ya que cuenta con varias funciones como:
 
@@ -16,7 +16,7 @@ El proyecto tiene como función principal facilitar el trabajo de los analistas 
 <img src="https://i.imgur.com/NnWf7Fm.png" alt="line break" width="100%" height="3px">
 
 
-FUNCIONES DEL SCANNER 
+#FUNCIONES DEL SCANNER 
 
 Verificación de instalación de Free Fire: Verifica si el juego está instalado.
 
@@ -37,14 +37,14 @@ Shaders: Verifica si el usuario realizó bypass usando wallhack/holograma.
 OBB: Verifica si el usuario realizó algún tipo de bypass en la OBB.
 
 
-CONTRIBUCIONES
+#CONTRIBUCIONES
 ¡Las contribuciones son bienvenidas! Por favor contáctame por privado en Discord: tizi_xit.
 
 🐛 Reporta un problema: ¿Encontraste un bug? ¡Avísame!
 
 💬 Haz una sugerencia: ¿Tienes ideas o sugerencias? Me encantaría escucharte.
 
-AGRADECIMIENTOS
+#AGRADECIMIENTOS
 
 Un gran agradecimiento a los siguientes miembros por su increíble trabajo y contribuciones sobre bypass:
 Keller – mástergames - bruno - lkzin - finish
