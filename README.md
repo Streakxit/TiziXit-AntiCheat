@@ -39,7 +39,10 @@ Contribuciones
 ¡Las contribuciones son bienvenidas! Por favor contáctame por privado en Discord: tizi_xit.
 
 🐛 Reporta un problema: ¿Encontraste un bug? ¡Avísame!
+
 💬 Haz una sugerencia: ¿Tienes ideas o sugerencias? Me encantaría escucharte.
+
 Agradecimientos
+
 Un gran agradecimiento a los siguientes miembros por su increíble trabajo y contribuciones sobre bypass:
 Keller – mástergames - bruno - lkzin - finish
