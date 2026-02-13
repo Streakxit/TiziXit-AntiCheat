@@ -7,13 +7,13 @@ tiziSS es un scanner para dispositivos Android que tiene como objetivo reunir lo
 
 El proyecto tiene como función principal facilitar el trabajo de los analistas en sus revisiones, ya que cuenta con varias funciones como:
 
-🔵 Automatización: El scanner hace todo el trabajo pesado por ti, ahorrándote tiempo.
+🔵 AUTOMATIZACIÓN: El scanner hace todo el trabajo pesado por ti, ahorrándote tiempo.
 
-⚫️ Logs sospechosos: Reúne automáticamente logs de todos los posibles bypass.
+⚫️ LOGS SOSPECHOSOS: Reúne automáticamente logs de todos los posibles bypass.
 
-🟣 Facilidad: El scanner se ejecuta usando Termux, y con algunos comandos simples ya podrás utilizarlo sin problemas.
+🟣 FACILIDAD: El scanner se ejecuta usando Termux, y con algunos comandos simples ya podrás utilizarlo sin problemas.
 
-https://cdn.discordapp.com/attachments/1458584891989168435/1471945011125026916/images.png?ex=6990c71e&is=698f759e&hm=80b665fc4a35b6a32b59e3e811c9e0039884cdabd4ccb727d69310f97bf8ce63&
+
 
 FUNCIONES DEL SCANNER 
 
@@ -36,14 +36,14 @@ Shaders: Verifica si el usuario realizó bypass usando wallhack/holograma.
 OBB: Verifica si el usuario realizó algún tipo de bypass en la OBB.
 
 
-Contribuciones
+CONTRIBUCIONES
 ¡Las contribuciones son bienvenidas! Por favor contáctame por privado en Discord: tizi_xit.
 
 🐛 Reporta un problema: ¿Encontraste un bug? ¡Avísame!
 
 💬 Haz una sugerencia: ¿Tienes ideas o sugerencias? Me encantaría escucharte.
 
-Agradecimientos
+AGRADECIMIENTOS
 
 Un gran agradecimiento a los siguientes miembros por su increíble trabajo y contribuciones sobre bypass:
 Keller – mástergames - bruno - lkzin - finish
