@@ -14,7 +14,8 @@ El proyecto tiene como función principal facilitar el trabajo de los analistas 
 🟣 Facilidad: El scanner se ejecuta usando Termux, y con algunos comandos simples ya podrás utilizarlo sin problemas.
 
 
-Funciones del Scanner
+FUNCIONES DEL SCANNER 
+
 Verificación de instalación de Free Fire: Verifica si el juego está instalado.
 
 Reinicio del dispositivo: Verifica si el dispositivo fue reiniciado hace menos de 60 minutos.
