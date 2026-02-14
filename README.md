@@ -1,4 +1,4 @@
-
+y
 <p align="center">
   <em>Desarrollado para la comunidad de Free Fire, por TiziXit.</em>
 </p>
@@ -49,7 +49,7 @@ Contáctame por privado en Discord: `tizi_xit`
 
 ## Agradecimientos
 
-Un agradecimiento especial a:
+Un agradecimiento especial por contribución en las técnicas de bypass a:
 
 <div style="font-weight: bold; margin-bottom: 10px;">
   Keller 
