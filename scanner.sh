@@ -597,14 +597,14 @@ check_downloads() {
     log_output "${B}[+] Escaneando Downloads...${N}"
     APKS=$(adb shell "find /sdcard/Download /sdcard/Downloads -name '*.apk' 2>/dev/null" | tr -d '\r')
     FOUND=0
-    echo "$APKS" | while read -r apk; do
+    while read -r apk; do
         [ -z "$apk" ] && continue
         NAME=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
         if echo "$NAME" | grep -qiE "hack|cheat|mod|panel|lucky|gg|magisk"; then
             log_output "${R}[!] APK SOSPECHOSO: $NAME${N}"
             FOUND=1
         fi
-    done
+    done <<< "$APKS"
     if [ $FOUND -eq 0 ]; then
         log_output "${G}[✓] Sin APKs sospechosos${N}\n"
     else
@@ -879,27 +879,214 @@ check_deleted_files() {
 }
 
 check_replays() {
-    log_output "${B}[+] Analizando replays...${N}"
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}              ANÁLISIS DE REPLAYS                      ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
     REPLAY_DIR="/sdcard/Android/data/$GAME_PKG/files/MReplays"
-    BINS=$(adb shell "ls -t '$REPLAY_DIR'/*.bin 2>/dev/null" | tr -d '\r' | head -1)
-    
-    if [ -z "$BINS" ]; then
-        log_output "${R}[!] No hay replays (sospechoso)${N}\n"
-        ((SUSPICIOUS_COUNT++))
-        return
+    MOTIVOS=()
+
+    # ── Obtener lista de .bin ordenados por fecha (más reciente primero) ──
+    BINS_RAW=$(adb shell "ls -t '$REPLAY_DIR'/*.bin 2>/dev/null" | tr -d '\r')
+
+    # Motivo 10 – Sin replays
+    if [ -z "$(echo "$BINS_RAW" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] Sin replays en la carpeta MReplays (sospechoso)${N}"
+        MOTIVOS+=("Motivo 10 - Ningún archivo .bin encontrado en MReplays")
+        ((SUSPICIOUS_COUNT+=2))
     fi
-    
-    echo "$BINS" | while read -r bin; do
-        STAT=$(adb shell "stat '$bin' 2>/dev/null")
-        MODIFY=$(echo "$STAT" | grep "Modify:" | awk '{print $2" "$3}')
-        CHANGE=$(echo "$STAT" | grep "Change:" | awk '{print $2" "$3}')
-        
-        log_output "${W}Replay: $(basename "$bin")${N}"
-        if [ "$MODIFY" != "$CHANGE" ]; then
-            log_output "${R}[!] Modify ≠ Change${N}"
-            ((SUSPICIOUS_COUNT++))
+
+    # ── Obtener versión instalada del juego (para Motivo 14) ──
+    GAME_VERSION_INSTALLED=""
+    DUMPSYS_PKG=$(adb shell "dumpsys package $GAME_PKG 2>/dev/null" | tr -d '\r')
+    if [ -n "$DUMPSYS_PKG" ]; then
+        GAME_VERSION_INSTALLED=$(echo "$DUMPSYS_PKG" | grep "versionName=" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    fi
+
+    # ── Motivo 13 – Dueño y grupo iguales (via ls -l) ──
+    LS_L=$(adb shell "ls -l '$REPLAY_DIR'/*.bin 2>/dev/null" | tr -d '\r')
+    while read -r linea; do
+        [ -z "$linea" ] && continue
+        DONO=$(echo "$linea" | awk '{print $3}')
+        GRUPO=$(echo "$linea" | awk '{print $4}')
+        FNAME=$(basename "$(echo "$linea" | awk '{print $NF}')")
+        if [ -n "$DONO" ] && [ "$DONO" = "$GRUPO" ]; then
+            MOTIVOS+=("Motivo 13 - Dueño y grupo iguales ($DONO): $FNAME")
         fi
-    done
+    done <<< "$LS_L"
+
+    # ── Variables para cruzar con la carpeta ──
+    ULTIMO_MODIFY_TS=0
+    ULTIMO_CHANGE_TS=0
+    ARCHIVO_MAS_RECIENTE=""
+    PRIMER_ARCHIVO=1
+
+    while read -r bin; do
+        [ -z "$bin" ] && continue
+        FNAME=$(basename "$bin")
+        log_output "${W}[*] Replay: $FNAME${N}"
+
+        STAT=$(adb shell "stat '$bin' 2>/dev/null" | tr -d '\r')
+        [ -z "$STAT" ] && continue
+
+        DA=$(echo "$STAT" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
+        DM=$(echo "$STAT" | grep "^Modify:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
+        DC=$(echo "$STAT" | grep "^Change:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
+
+        TS_A=$(date -d "${DA%%.*}" +%s 2>/dev/null || echo 0)
+        TS_M=$(date -d "${DM%%.*}" +%s 2>/dev/null || echo 0)
+        TS_C=$(date -d "${DC%%.*}" +%s 2>/dev/null || echo 0)
+
+        # Guardar timestamps del archivo más reciente para cruces con la carpeta
+        if [ $PRIMER_ARCHIVO -eq 1 ]; then
+            ULTIMO_MODIFY_TS=$TS_M
+            ULTIMO_CHANGE_TS=$TS_C
+            ARCHIVO_MAS_RECIENTE="$bin"
+            PRIMER_ARCHIVO=0
+        fi
+
+        # Motivo 1 – Access posterior a Modify
+        if [ "$TS_A" -gt "$TS_M" ] 2>/dev/null; then
+            MOTIVOS+=("Motivo 1 - Access posterior a Modify: $FNAME")
+        fi
+
+        # Motivo 2 – Timestamps con milisegundos .000
+        NANOS_A=$(echo "$DA" | grep -oE '\.[0-9]+$')
+        NANOS_M=$(echo "$DM" | grep -oE '\.[0-9]+$')
+        NANOS_C=$(echo "$DC" | grep -oE '\.[0-9]+$')
+        if echo "$NANOS_A$NANOS_M$NANOS_C" | grep -qE '\.0+$'; then
+            MOTIVOS+=("Motivo 2 - Timestamps con milisegundos .000: $FNAME")
+        fi
+
+        # Motivo 3 – Modify ≠ Change en el archivo
+        if [ "$DM" != "$DC" ]; then
+            MOTIVOS+=("Motivo 3 - Modify ≠ Change en el archivo: $FNAME")
+        fi
+
+        # Motivo 4 – Nombre del archivo no coincide con Modify (diff > 1 segundo)
+        NAME_DATE=$(echo "$FNAME" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1)
+        if [ -n "$NAME_DATE" ]; then
+            NAME_NORMALIZED=$(echo "$NAME_DATE" | sed 's/^\([0-9]\{4\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)$/\1-\2-\3 \4:\5:\6/')
+            TS_NAME=$(date -d "$NAME_NORMALIZED" +%s 2>/dev/null || echo 0)
+            DIFF_NAME=$(( TS_NAME > TS_M ? TS_NAME - TS_M : TS_M - TS_NAME ))
+            if [ "$DIFF_NAME" -gt 1 ] 2>/dev/null; then
+                MOTIVOS+=("Motivo 4 - Nombre del archivo no coincide con Modify: $FNAME")
+            fi
+        fi
+
+        # Motivo 8 – Access del .json diferente a los tiempos del .bin / .json ausente
+        JSON_PATH="${bin%.bin}.json"
+        JSON_STAT=$(adb shell "stat '$JSON_PATH' 2>/dev/null" | tr -d '\r')
+        if [ -z "$JSON_STAT" ]; then
+            MOTIVOS+=("Motivo 8 - Archivo JSON ausente: $(basename "$JSON_PATH")")
+        else
+            JSON_DA=$(echo "$JSON_STAT" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
+            if [ "$JSON_DA" != "$DA" ] && [ "$JSON_DA" != "$DM" ] && [ "$JSON_DA" != "$DC" ]; then
+                MOTIVOS+=("Motivo 8 - Access del .json diferente a tiempos del .bin: $(basename "$JSON_PATH")")
+            fi
+        fi
+
+        # Motivo 14 – Versión del replay no coincide con la del juego instalado
+        if [ -n "$GAME_VERSION_INSTALLED" ]; then
+            JSON_CONTENT=$(adb shell "cat '$JSON_PATH' 2>/dev/null" | tr -d '\r')
+            if [ -n "$JSON_CONTENT" ]; then
+                VERSION_JSON=$(echo "$JSON_CONTENT" | grep -oE '"Version":"[^"]*"' | grep -oE ':[^}]*' | tr -d ':"')
+                if [ -n "$VERSION_JSON" ] && [ "$VERSION_JSON" != "$GAME_VERSION_INSTALLED" ]; then
+                    MOTIVOS+=("Motivo 14 - Replay no es del dispositivo (versión replay: $VERSION_JSON, juego: $GAME_VERSION_INSTALLED): $(basename "$JSON_PATH")")
+                fi
+            fi
+        fi
+
+    done <<< "$BINS_RAW"
+
+    # ── Verificaciones sobre la carpeta MReplays ──
+    PASTA_STAT=$(adb shell "stat '$REPLAY_DIR' 2>/dev/null" | tr -d '\r')
+    if [ -n "$PASTA_STAT" ]; then
+        PA=$(echo "$PASTA_STAT" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
+        PM=$(echo "$PASTA_STAT" | grep "^Modify:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
+        PC=$(echo "$PASTA_STAT" | grep "^Change:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
+
+        TS_PM=$(date -d "${PM%%.*}" +%s 2>/dev/null || echo 0)
+        TS_PC=$(date -d "${PC%%.*}" +%s 2>/dev/null || echo 0)
+
+        # Motivo 5 – Access = Modify = Change en carpeta (todos idénticos)
+        if [ "$PA" = "$PM" ] && [ "$PM" = "$PC" ] && [ -n "$PA" ]; then
+            MOTIVOS+=("Motivo 5 - Access, Modify y Change idénticos en carpeta MReplays")
+        fi
+
+        # Motivo 6 – Milisegundos .000 en Modify o Change de la carpeta
+        PM_NANOS=$(echo "$PM" | grep -oE '\.[0-9]+$')
+        PC_NANOS=$(echo "$PC" | grep -oE '\.[0-9]+$')
+        if echo "$PM_NANOS$PC_NANOS" | grep -qE '\.0+$'; then
+            MOTIVOS+=("Motivo 6 - Milisegundos .000 en carpeta MReplays")
+        fi
+
+        # Motivo 7 – Carpeta modificada después del último replay
+        if [ "$TS_PM" -gt "$ULTIMO_MODIFY_TS" ] && [ "$ULTIMO_MODIFY_TS" -gt 0 ] 2>/dev/null; then
+            MOTIVOS+=("Motivo 7 - Carpeta MReplays modificada después del último replay (Modify)")
+        fi
+        if [ "$TS_PC" -gt "$ULTIMO_CHANGE_TS" ] && [ "$ULTIMO_CHANGE_TS" -gt 0 ] 2>/dev/null; then
+            MOTIVOS+=("Motivo 7 - Carpeta MReplays modificada después del último replay (Change)")
+        fi
+
+        # Motivo 9 – Nombre no coincide con Modify de carpeta + milisegundos sospechosos
+        if [ -n "$ARCHIVO_MAS_RECIENTE" ]; then
+            NAME_DATE2=$(basename "$ARCHIVO_MAS_RECIENTE" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1)
+            if [ -n "$NAME_DATE2" ]; then
+                NAME_FLAT=$(echo "$NAME_DATE2" | tr -d '-')
+                MODIFY_FLAT=$(echo "$PM" | grep -oE '^[0-9 :-]+' | tr -d ' :-')
+                PA_NANOS=$(echo "$PA" | grep -oE '\.[0-9]+$' | tr -d '.')
+                if [ -n "$PA_NANOS" ]; then
+                    FIRST2=$(echo "$PA_NANOS" | cut -c1-2)
+                    REST=$(echo "$PA_NANOS" | cut -c3-)
+                    ALL_ZEROS=$(echo "$REST" | grep -c '^0*$')
+                    if ( [ "$ALL_ZEROS" -gt 0 ] || ( [ "$FIRST2" -le 90 ] && echo "$REST" | grep -q '^0*$' ) ) && [ "$NAME_FLAT" != "$MODIFY_FLAT" ]; then
+                        MOTIVOS+=("Motivo 9 - Nombre no coincide con Modify de carpeta + milisegundos sospechosos: $(basename "$ARCHIVO_MAS_RECIENTE")")
+                    fi
+                fi
+            fi
+        fi
+
+        # Motivo 11 – Modify ≠ Change en carpeta
+        if [ "$PM" != "$PC" ] && [ -n "$PM" ]; then
+            MOTIVOS+=("Motivo 11 - Modify ≠ Change en carpeta MReplays")
+        fi
+
+        # Motivo 12 – Change de carpeta no coincide con Access del .bin o .json más reciente
+        if [ -n "$ARCHIVO_MAS_RECIENTE" ]; then
+            BIN_STAT_12=$(adb shell "stat '$ARCHIVO_MAS_RECIENTE' 2>/dev/null" | tr -d '\r')
+            BIN_ACCESS_12=$(echo "$BIN_STAT_12" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | tail -1)
+            JSON_PATH_12="${ARCHIVO_MAS_RECIENTE%.bin}.json"
+            JSON_STAT_12=$(adb shell "stat '$JSON_PATH_12' 2>/dev/null" | tr -d '\r')
+            JSON_ACCESS_12=$(echo "$JSON_STAT_12" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | tail -1)
+            if [ "$BIN_ACCESS_12" != "$PC" ] && [ "$JSON_ACCESS_12" != "$PC" ] && [ -n "$PC" ]; then
+                MOTIVOS+=("Motivo 12 - Change de MReplays no coincide con Access del .bin o .json
+    Change MReplays: $PC
+    Access .bin:     $BIN_ACCESS_12
+    Access .json:    $JSON_ACCESS_12")
+            fi
+        fi
+
+        # ── Info extra: fecha acceso carpeta vs fecha instalación del juego ──
+        INSTALL_TIME=$(adb shell "dumpsys package $GAME_PKG 2>/dev/null | grep firstInstallTime" | tr -d '\r' | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1)
+        if [ -n "$PA" ] && [ -n "$INSTALL_TIME" ]; then
+            log_output "${Y}[*] Acceso carpeta MReplays: ${PA%%.*}${N}"
+            log_output "${Y}[*] Instalación del juego:   $INSTALL_TIME${N}"
+            log_output "${W}[#] Verifica si el juego fue reinstalado justo antes de la partida comparando estas fechas.${N}"
+        fi
+    fi
+
+    # ── Resultado final ──
+    echo ""
+    if [ ${#MOTIVOS[@]} -gt 0 ]; then
+        log_output "${R}[!] REPLAY PASADO DETECTADO - Aplica el W.O!${N}"
+        for motivo in "${MOTIVOS[@]}"; do
+            log_output "${Y}    - $motivo${N}"
+        done
+        ((SUSPICIOUS_COUNT+=3))
+    else
+        log_output "${G}[✓] Ningún replay fue pasado y la carpeta MReplays está normal.${N}"
+    fi
     echo ""
 }
 
