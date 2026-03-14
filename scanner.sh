@@ -329,14 +329,231 @@ check_background_scripts() {
 }
 
 detect_shell_bypass() {
-    log_output "${B}[+] Detectando bypass de funciones...${N}"
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}         DETECCIÓN DE BYPASS DE FUNCIONES SHELL         ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    BYPASS_DETECTADO=0
+
+    # --- 1. Verificar funciones maliciosas sobrescritas ---
+    log_output "${B}[+] Verificando funciones maliciosas en el ambiente shell...${N}"
     for func in pkg git cd stat adb; do
-        if adb shell "type $func 2>/dev/null | grep -q function"; then
-            log_output "${R}[!] BYPASS: función '$func' sobrescrita${N}"
+        RESULT=$(adb shell "type $func 2>/dev/null | grep -q function && echo FUNCTION_DETECTED" 2>/dev/null | tr -d '\r')
+        if echo "$RESULT" | grep -q "FUNCTION_DETECTED"; then
+            log_output "${R}[!] BYPASS DETECTADO: Función '$func' fue sobrescrita!${N}"
             ((SUSPICIOUS_COUNT+=2))
+            BYPASS_DETECTADO=1
         fi
     done
-    log_output "${G}[✓] Verificación completada${N}\n"
+
+    # --- 2. Testear acceso a directorios críticos ---
+    log_output "${B}[+] Testeando acceso a directorios críticos...${N}"
+    CRITICAL_DIRS=(
+        "/system/bin"
+        "/data/data/com.dts.freefireth/files"
+        "/data/data/com.dts.freefiremax/files"
+        "/storage/emulated/0/Android/data"
+    )
+    for dir in "${CRITICAL_DIRS[@]}"; do
+        DIR_RESULT=$(adb shell "ls -la \"$dir\" 2>/dev/null | head -3" 2>/dev/null | tr -d '\r')
+        if echo "$DIR_RESULT" | grep -qE "blocked|redirected|bypass"; then
+            log_output "${R}[!] BYPASS DETECTADO: Acceso bloqueado/redireccionado al directorio: $dir${N}"
+            log_output "${Y}[!] Respuesta: $DIR_RESULT${N}"
+            ((SUSPICIOUS_COUNT+=2))
+            BYPASS_DETECTADO=1
+        fi
+    done
+
+    # --- 3. Verificar procesos sospechosos ---
+    log_output "${B}[+] Verificando procesos sospechosos...${N}"
+    PROC_RESULT=$(adb shell "ps | grep -E '(bypass|redirect|fake)' | grep -vE '(drm_fake_vsync|mtk_drm_fake_vsync|mtk_drm_fake_vs)' 2>/dev/null" 2>/dev/null | tr -d '\r')
+    if [ -n "$PROC_RESULT" ]; then
+        SUSPICIOUS_PROCS=$(echo "$PROC_RESULT" \
+            | grep -v '\[kblockd\]' \
+            | grep -v 'kworker' \
+            | grep -v '\[ksoftirqd\]' \
+            | grep -v '\[migration\]' \
+            | grep -v 'mtk_drm_fake_vsync' \
+            | grep -v 'drm_fake_vsync')
+        if [ -n "$SUSPICIOUS_PROCS" ]; then
+            log_output "${R}[!] BYPASS DETECTADO: Procesos sospechosos en ejecución!${N}"
+            log_output "${Y}[!] Procesos encontrados:${N}"
+            echo "$SUSPICIOUS_PROCS" | while read -r line; do
+                [ -n "$line" ] && log_output "${Y}  $line${N}"
+            done
+            ((SUSPICIOUS_COUNT+=2))
+            BYPASS_DETECTADO=1
+        fi
+    fi
+
+    # --- 4. Verificar archivos de configuración del shell ---
+    log_output "${B}[+] Verificando archivos de configuración del shell...${N}"
+    CONFIG_FILES=(
+        "~/.bashrc"
+        "~/.bash_profile"
+        "~/.profile"
+        "~/.zshrc"
+        "~/.config/fish/config.fish"
+        "/data/data/com.termux/files/usr/etc/bash.bashrc"
+    )
+    for cfg in "${CONFIG_FILES[@]}"; do
+        CFG_RESULT=$(adb shell "if [ -f $cfg ]; then cat $cfg | grep -E '(function pkg|function git|function cd|function stat|function adb)' 2>/dev/null; fi" 2>/dev/null | tr -d '\r')
+        if [ -n "$(echo "$CFG_RESULT" | tr -d '[:space:]')" ]; then
+            log_output "${R}[!] BYPASS DETECTADO: Funciones maliciosas en $cfg!${N}"
+            log_output "${Y}[!] Contenido detectado: $CFG_RESULT${N}"
+            ((SUSPICIOUS_COUNT+=2))
+            BYPASS_DETECTADO=1
+        fi
+    done
+
+    # --- 5. Testear comportamiento real de git ---
+    log_output "${B}[+] Testeando comportamiento real de git...${N}"
+    GIT_HELP=$(adb shell "cd /data/local/tmp; git clone --help 2>&1 | head -1" 2>/dev/null | tr -d '\r')
+    if [ -z "$GIT_HELP" ] || ! echo "$GIT_HELP" | grep -q "usage: git"; then
+        CLONE_RESULT=$(adb shell "cd /data/local/tmp; timeout 5 git clone https://github.com/kellerzz/KellerSS-Android test-repo 2>&1 | head -3" 2>/dev/null | tr -d '\r')
+        if echo "$CLONE_RESULT" | grep -qE "wendell77x|Comando bloqueado|blocked"; then
+            log_output "${R}[!] BYPASS DETECTADO: Git clone siendo redireccionado!${N}"
+            log_output "${Y}[!] Respuesta: $CLONE_RESULT${N}"
+            ((SUSPICIOUS_COUNT+=2))
+            BYPASS_DETECTADO=1
+        fi
+    fi
+
+    # --- 6. Testear comportamiento real de pkg ---
+    log_output "${B}[+] Testeando comportamiento real de pkg...${N}"
+    PKG_HELP=$(adb shell "pkg --help 2>&1 | head -1" 2>/dev/null | tr -d '\r')
+    if [ -z "$PKG_HELP" ] || ! echo "$PKG_HELP" | grep -q "Usage:"; then
+        PKG_INSTALL=$(adb shell "timeout 3 pkg install --help 2>&1" 2>/dev/null | tr -d '\r')
+        if echo "$PKG_INSTALL" | grep -qE "Comando bloqueado|blocked" || [ -z "$(echo "$PKG_INSTALL" | tr -d '[:space:]')" ]; then
+            log_output "${R}[!] BYPASS DETECTADO: Comando pkg siendo bloqueado!${N}"
+            log_output "${Y}[!] Respuesta: $PKG_INSTALL${N}"
+            ((SUSPICIOUS_COUNT+=2))
+            BYPASS_DETECTADO=1
+        fi
+    fi
+
+    # --- 7. Testear manipulación de la función stat ---
+    log_output "${B}[+] Testeando manipulación de la función stat...${N}"
+    TEST_FILE="/data/local/tmp/test_stat_$(date +%s)"
+    adb shell "echo test > $TEST_FILE 2>/dev/null" >/dev/null 2>&1
+    sleep 1
+    STAT_RESULT=$(adb shell "stat $TEST_FILE 2>/dev/null" | tr -d '\r')
+    if [ -n "$STAT_RESULT" ]; then
+        MODIFY_TIME=$(echo "$STAT_RESULT" | grep "Modify:" | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}" | head -1)
+        ACCESS_TIME=$(echo "$STAT_RESULT" | grep "Access:" | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}" | head -1)
+        if [ -n "$MODIFY_TIME" ]; then
+            TS_MODIFY=$(date -d "$MODIFY_TIME" +%s 2>/dev/null || echo 0)
+            TS_ACCESS=$(date -d "$ACCESS_TIME" +%s 2>/dev/null || echo 0)
+            TS_NOW=$(date +%s)
+            DIFF_NOW=$(( TS_NOW - TS_MODIFY < 0 ? TS_MODIFY - TS_NOW : TS_NOW - TS_MODIFY ))
+            DIFF_INTERNAL=$(( TS_ACCESS - TS_MODIFY < 0 ? TS_MODIFY - TS_ACCESS : TS_ACCESS - TS_MODIFY ))
+            if [ "$DIFF_NOW" -gt 86400 ] || [ "$DIFF_INTERNAL" -gt 300 ]; then
+                log_output "${R}[!] BYPASS DETECTADO: Función stat retornando datos inconsistentes!${N}"
+                log_output "${Y}[!] Archivo creado ahora, pero stat muestra: $MODIFY_TIME${N}"
+                ((SUSPICIOUS_COUNT+=2))
+                BYPASS_DETECTADO=1
+            fi
+        fi
+    fi
+    adb shell "rm -f $TEST_FILE 2>/dev/null" >/dev/null 2>&1
+
+    # --- 8. Verificar stat de MReplays (fecha sospechosa) ---
+    MREPLAYS_PATH="/storage/emulated/0/Android/data/com.dts.freefireth/files/MReplays"
+    STAT_REPLAYS=$(adb shell "stat '$MREPLAYS_PATH' 2>/dev/null" | tr -d '\r')
+    if [ -n "$STAT_REPLAYS" ]; then
+        MODIFY_DATE=$(echo "$STAT_REPLAYS" | grep "Modify:" | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}" | head -1)
+        if [ -n "$MODIFY_DATE" ]; then
+            TS_MODIFY=$(date -d "$MODIFY_DATE" +%s 2>/dev/null || echo 0)
+            TS_2021=$(date -d "2021-01-01" +%s 2>/dev/null || echo 1609459200)
+            if [ "$MODIFY_DATE" = "2020-01-01" ] || ( [ "$TS_MODIFY" -gt 0 ] && [ "$TS_MODIFY" -lt "$TS_2021" ] ); then
+                log_output "${R}[!] BYPASS DETECTADO: Stat retornando fecha sospechosa para MReplays!${N}"
+                log_output "${Y}[!] Fecha sospechosa: $MODIFY_DATE${N}"
+                ((SUSPICIOUS_COUNT+=2))
+                BYPASS_DETECTADO=1
+            fi
+        fi
+    fi
+
+    # --- 9. Testear comportamiento del comando cd ---
+    log_output "${B}[+] Testeando comportamiento del comando cd...${N}"
+    CD_RESULT=$(adb shell "cd /data/local/tmp; pwd; cd /; pwd" 2>/dev/null | tr -d '\r')
+    if [ -z "$CD_RESULT" ] || ! echo "$CD_RESULT" | grep -q "/"; then
+        log_output "${R}[!] BYPASS DETECTADO: Comando cd no funciona normalmente!${N}"
+        log_output "${Y}[!] Respuesta: $CD_RESULT${N}"
+        ((SUSPICIOUS_COUNT+=2))
+        BYPASS_DETECTADO=1
+    fi
+
+    # --- 10. Testear integridad de comandos básicos ---
+    log_output "${B}[+] Testeando integridad de comandos básicos...${N}"
+    WHICH_RESULT=$(adb shell "which ls 2>/dev/null" | tr -d '\r')
+    if [ -z "$WHICH_RESULT" ] || ! echo "$WHICH_RESULT" | grep -q "/system/bin/ls"; then
+        log_output "${R}[!] BYPASS DETECTADO: Comando 'which' no retorna resultado esperado!${N}"
+        log_output "${Y}[!] Esperado: /system/bin/ls  Recibido: $WHICH_RESULT${N}"
+        ((SUSPICIOUS_COUNT+=2))
+        BYPASS_DETECTADO=1
+    fi
+    ECHO_RESULT=$(adb shell "echo test123" | tr -d '\r')
+    if [ "$ECHO_RESULT" != "test123" ]; then
+        log_output "${R}[!] BYPASS DETECTADO: Comando 'echo' no retorna resultado esperado!${N}"
+        log_output "${Y}[!] Esperado: test123  Recibido: $ECHO_RESULT${N}"
+        ((SUSPICIOUS_COUNT+=2))
+        BYPASS_DETECTADO=1
+    fi
+    CURRENT_YEAR=$(date +%Y)
+    DATE_RESULT=$(adb shell "date +%Y 2>/dev/null" | tr -d '\r')
+    if [ -z "$DATE_RESULT" ] || [ "$DATE_RESULT" != "$CURRENT_YEAR" ]; then
+        log_output "${R}[!] BYPASS DETECTADO: Comando 'date' no retorna el año esperado!${N}"
+        log_output "${Y}[!] Esperado: $CURRENT_YEAR  Recibido: $DATE_RESULT${N}"
+        ((SUSPICIOUS_COUNT+=2))
+        BYPASS_DETECTADO=1
+    fi
+
+    # --- 11. Testear bloqueo de comandos pkg via bash ---
+    log_output "${B}[+] Testeando bloqueo de comandos pkg...${N}"
+    PKG_BLOCK=$(adb shell 'echo "pkg install com.dts.freefireth" | bash 2>&1' 2>/dev/null | tr -d '\r')
+    if echo "$PKG_BLOCK" | grep -qE "Comando bloqueado|blocked"; then
+        log_output "${R}[!] BYPASS DETECTADO: Bloqueo de comandos pkg activo!${N}"
+        log_output "${Y}[!] Respuesta del sistema: $PKG_BLOCK${N}"
+        ((SUSPICIOUS_COUNT+=2))
+        BYPASS_DETECTADO=1
+    fi
+
+    # --- 12. Buscar scripts .sh con funciones maliciosas ---
+    log_output "${B}[+] Verificando archivos de bypass en el dispositivo...${N}"
+    BYPASS_FILES=$(adb shell 'find /sdcard /data/local/tmp /data/data/com.termux/files/home -name "*.sh" -exec grep -l "function pkg\|function git\|function cd\|function stat\|function adb\|wendell77x\|FAKE_ADB_SHELL" {} \; 2>/dev/null | head -10' 2>/dev/null | tr -d '\r')
+    if [ -n "$(echo "$BYPASS_FILES" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] BYPASS DETECTADO: Archivos de bypass encontrados!${N}"
+        log_output "${Y}[!] Archivos sospechosos:${N}"
+        echo "$BYPASS_FILES" | while read -r f; do
+            [ -n "$f" ] && log_output "${Y}  $f${N}"
+        done
+        ((SUSPICIOUS_COUNT+=2))
+        BYPASS_DETECTADO=1
+    fi
+
+    # --- 13. Buscar archivos con nombres sospechosos ---
+    SUSPICIOUS_NAMES=$(adb shell 'find /sdcard /data/local/tmp /data/data/com.termux/files/home -name "*block*" -o -name "*redirect*" -o -name "*bypass*" -o -name "*install*" -o -name "*hack*" 2>/dev/null | head -10' 2>/dev/null | tr -d '\r')
+    if [ -n "$(echo "$SUSPICIOUS_NAMES" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] BYPASS DETECTADO: Archivos con nombres sospechosos encontrados!${N}"
+        log_output "${Y}[!] Archivos encontrados:${N}"
+        echo "$SUSPICIOUS_NAMES" | while read -r f; do
+            [ -n "$f" ] && log_output "${Y}  $f${N}"
+        done
+        ((SUSPICIOUS_COUNT+=2))
+        BYPASS_DETECTADO=1
+    fi
+
+    # --- Resumen del módulo ---
+    if [ $BYPASS_DETECTADO -eq 1 ]; then
+        log_output "${R}[!] ========================================${N}"
+        log_output "${R}[!] BYPASS DE FUNCIONES SHELL DETECTADO!${N}"
+        log_output "${R}[!] El usuario está usando scripts maliciosos!${N}"
+        log_output "${R}[!] ¡APLICA EL W.O INMEDIATAMENTE!${N}"
+        log_output "${R}[!] ========================================${N}\n"
+    else
+        log_output "${G}[✓] Ningún bypass de funciones shell detectado.${N}\n"
+    fi
 }
 
 check_system_logs() {
