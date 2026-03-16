@@ -27,11 +27,9 @@ GAME_PKG=""
 banner() {
     clear
 
-    
     local width=58
     local inner=$((width-2))
 
-    
     local top="╔"
     local bottom="╚"
     for i in $(seq 1 $inner); do
@@ -41,7 +39,6 @@ banner() {
     top+="╗"
     bottom+="╝"
 
-    
     _center() {
         local text="$1"
         local len=${#text}
@@ -50,24 +47,33 @@ banner() {
         printf "%${left}s%s%${right}s" "" "$text" ""
     }
 
-    
+    _center_print_link() {
+        local text="$1"
+        local url="$2"
+        local len=${#text}
+        local left=$(( (inner - len) / 2 ))
+        local right=$(( inner - len - left ))
+        printf "%b\n" "${C}║${M}$(printf '%*s' "$left" '')\e]8;;${url}\e\\${text}\e]8;;\e\\$(printf '%*s' "$right" '')${C}║${N}"
+    }
+
     printf "%b\n" "${C}${top}${N}"
     printf "%b\n" "${C}║${M}$( _center "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM" )${C}║${N}"
     printf "%b\n" "${C}║${M}$( _center "VERSIÓN BETA 1.0" )${C}║${N}"
-    
     printf "%b\n" "${C}║${M}$( _center "mi discord gg/lskcheats" )${C}║${N}"
+    printf "%b\n" "${C}║${M}$( _center "Cualquier ayuda o sugerencia sobre el análisis de bypass será recibida en mi Instagram." )${C}║${N}"
+    printf "%b\n" "${C}║${M}$( _center "Si encontrás un bug o fallo, avisame por Instagram." )${C}║${N}"
+
+    _center_print_link "Instagram" "https://instagram.com/tizi_7zz"
+
     printf "%b\n" "${C}${bottom}${N}"
 
     echo ""
 
-    
-    local top2="$top"
-    local bottom2="$bottom"
-    printf "%b\n" "${Y}${top2}${N}"
+    printf "%b\n" "${Y}${top}${N}"
     printf "%b\n" "${Y}║$( _center "⚠️  ESTE SCANNER ESTÁ EN PROCESO DE DESARROLLO  ⚠️" )║${N}"
     printf "%b\n" "${Y}║$( _center "SE RECOMIENDA HACER REVISIÓN MANUAL ADICIONAL" )║${N}"
     printf "%b\n" "${Y}║$( _center "PARA MAYOR SEGURIDAD Y PRECISIÓN" )║${N}"
-    printf "%b\n" "${Y}${bottom2}${N}"
+    printf "%b\n" "${Y}${bottom}${N}"
 
     echo ""
     sleep 3
