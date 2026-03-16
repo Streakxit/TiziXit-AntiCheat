@@ -23,15 +23,15 @@ SUSPICIOUS_COUNT=0
 GAME_SELECTED=""
 GAME_PKG=""
 
-# Banner inicial
+
 banner() {
     clear
 
-    # ancho total del recuadro (incluye bordes)
+    
     local width=58
     local inner=$((width-2))
 
-    # construir bordes superior/inferior
+    
     local top="╔"
     local bottom="╚"
     for i in $(seq 1 $inner); do
@@ -41,7 +41,7 @@ banner() {
     top+="╗"
     bottom+="╝"
 
-    # función auxiliar: centra texto dentro del ancho interior
+    
     _center() {
         local text="$1"
         local len=${#text}
@@ -50,17 +50,17 @@ banner() {
         printf "%${left}s%s%${right}s" "" "$text" ""
     }
 
-    # PRIMER RECUADRO (HEADER)
+    
     printf "%b\n" "${C}${top}${N}"
     printf "%b\n" "${C}║${M}$( _center "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM" )${C}║${N}"
     printf "%b\n" "${C}║${M}$( _center "VERSIÓN BETA 1.0" )${C}║${N}"
-    # linea del discord, centrada y con mismo color ${M}
+    
     printf "%b\n" "${C}║${M}$( _center "mi discord gg/lskcheats" )${C}║${N}"
     printf "%b\n" "${C}${bottom}${N}"
 
     echo ""
 
-    # SEGUNDO RECUADRO (ADVERTENCIA) - mismo ancho
+    
     local top2="$top"
     local bottom2="$bottom"
     printf "%b\n" "${Y}${top2}${N}"
