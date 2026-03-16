@@ -4,7 +4,7 @@
 # ============================================
 # FREE FIRE ANTI-CHEAT SCANNER
 # Creado por: TIZI.XIT
-# Versión: 1.0.0 Beta
+# VersiÃ³n: 1.0.0 Beta
 # ============================================
 
 # Colores
@@ -23,140 +23,57 @@ SUSPICIOUS_COUNT=0
 GAME_SELECTED=""
 GAME_PKG=""
 
-# guarda el logo oficial (instagram-logo.svg)
-cat > instagram-logo.svg <<'SVG'
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" aria-labelledby="title">
-  <title>Instagram logo</title>
-  <defs>
-    <linearGradient id="ig-grad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#feda75"/>
-      <stop offset="25%" stop-color="#fa7e1e"/>
-      <stop offset="50%" stop-color="#d62976"/>
-      <stop offset="75%" stop-color="#962fbf"/>
-      <stop offset="100%" stop-color="#4f5bd5"/>
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="10" result="b"/>
-      <feOffset dx="0" dy="6" result="o"/>
-      <feBlend in="SourceGraphic" in2="o"/>
-    </filter>
-  </defs>
-
-  <rect x="32" y="32" width="448" height="448" rx="96" ry="96" fill="url(#ig-grad)" />
-  <rect x="32" y="32" width="448" height="448" rx="96" ry="96" fill="none" filter="url(#shadow)"/>
-
-  <rect x="140" y="156" width="232" height="200" rx="48" ry="48"
-        fill="none" stroke="#ffffff" stroke-width="28" stroke-linejoin="round"/>
-  <circle cx="256" cy="256" r="56" fill="none" stroke="#ffffff" stroke-width="28" />
-  <circle cx="352" cy="180" r="16" fill="#ffffff" />
-</svg>
-SVG
-
-# Banner con "botón" que usa OSC 8 (clickeable en terminales compatibles)
+# Banner inicial
 banner() {
     clear
-    local cols=$(tput cols 2>/dev/null || echo 80)
-    local width=$(( cols > 70 ? 70 : cols ))
-    local inner=$(( width - 4 ))
-    local esc=$'\e'
 
-    border_top() {
-        printf "%b" "${C}╔"
-        printf "%0.s═" $(seq 1 $((inner+2)))
-        printf "%b\n" "╗${N}"
-    }
-    border_bottom() {
-        printf "%b" "${C}╚"
-        printf "%0.s═" $(seq 1 $((inner+2)))
-        printf "%b\n" "╝${N}"
-    }
+    # ancho total del recuadro (incluye bordes)
+    local width=58
+    local inner=$((width-2))
 
-    center() {
+    # construir bordes superior/inferior
+    local top="â•”"
+    local bottom="â•š"
+    for i in $(seq 1 $inner); do
+        top+="â•"
+        bottom+="â•"
+    done
+    top+="â•—"
+    bottom+="â•"
+
+    # funciÃ³n auxiliar: centra texto dentro del ancho interior
+    _center() {
         local text="$1"
         local len=${#text}
-        [ $len -gt $inner ] && text="${text:0:$inner}" && len=${#text}
         local left=$(( (inner - len) / 2 ))
         local right=$(( inner - len - left ))
-        printf "%*s%s%*s" "$left" "" "$text" "$right" ""
+        printf "%${left}s%s%${right}s" "" "$text" ""
     }
 
-    line() {
-        printf "%b" "${C}║${N}"
-        printf "%b" "${M}%s${N}" "$(center "$1")"
-        printf "%b\n" "${C}║${N}"
-    }
+    # PRIMER RECUADRO (HEADER)
+    printf "%b\n" "${C}${top}${N}"
+    printf "%b\n" "${C}â•‘${M}$( _center "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM" )${C}â•‘${N}"
+    printf "%b\n" "${C}â•‘${M}$( _center "VERSIÃ“N BETA 1.0" )${C}â•‘${N}"
+    # linea del discord, centrada y con mismo color ${M}
+    printf "%b\n" "${C}â•‘${M}$( _center "mi discord gg/lskcheats" )${C}â•‘${N}"
+    printf "%b\n" "${C}${bottom}${N}"
 
-    ig_box() {
-        local url="https://instagram.com/tizi_7zz"
-        local label=" INSTAGRAM "
-        local len=${#label}
-        local top="┌$(printf '─%.0s' $(seq 1 $len))┐"
-        local mid="│${label}│"
-        local bot="└$(printf '─%.0s' $(seq 1 $len))┘"
-        local link_start="${esc}]8;;${url}${esc}\\"
-        local link_end="${esc}]8;;${esc}\\"
+    echo ""
 
-        printf "%b" "${C}║${N}"
-        printf "%b" "${M}%s${N}" "$(center "$top")"
-        printf "%b\n" "${C}║${N}"
+    # SEGUNDO RECUADRO (ADVERTENCIA) - mismo ancho
+    local top2="$top"
+    local bottom2="$bottom"
+    printf "%b\n" "${Y}${top2}${N}"
+    printf "%b\n" "${Y}â•‘$( _center "âš ï¸  ESTE SCANNER ESTÃ EN PROCESO DE DESARROLLO  âš ï¸" )â•‘${N}"
+    printf "%b\n" "${Y}â•‘$( _center "SE RECOMIENDA HACER REVISIÃ“N MANUAL ADICIONAL" )â•‘${N}"
+    printf "%b\n" "${Y}â•‘$( _center "PARA MAYOR SEGURIDAD Y PRECISIÃ“N" )â•‘${N}"
+    printf "%b\n" "${Y}${bottom2}${N}"
 
-        printf "%b" "${C}║${N}"
-        local left=$(( (inner - ${#mid}) / 2 ))
-        [ $left -lt 0 ] && left=0
-        printf "%b" "${M}%*s${N}" "$left" ""
-        printf "%b" "${link_start}${M}${mid}${link_end}${N}"
-        local right=$(( inner - left - ${#mid} ))
-        [ $right -lt 0 ] && right=0
-        printf "%b" "${M}%*s${N}" "$right" ""
-        printf "%b\n" "${C}║${N}"
-
-        printf "%b" "${C}║${N}"
-        printf "%b" "${M}%s${N}" "$(center "$bot")"
-        printf "%b\n" "${C}║${N}"
-    }
-
-    border_top
-    line "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM"
-    line "VERSIÓN BETA 1.0"
-    line "mi discord gg/lskcheats"
-    line "Reportes y sugerencias por Instagram"
-    ig_box
-    border_bottom
-
-    printf "\n"
-
-    printf "%b" "${Y}╔"
-    printf "%0.s═" $(seq 1 $((inner+2)))
-    printf "%b\n" "╗${N}"
-    printf "%b" "${Y}║$(center '⚠️  SCANNER EN DESARROLLO  ⚠️')║${N}\n"
-    printf "%b" "${Y}║$(center 'SE RECOMIENDA REVISIÓN MANUAL')║${N}\n"
-    printf "%b" "${Y}║$(center 'PARA MAYOR PRECISIÓN')║${N}\n"
-    printf "%b" "${Y}╚"
-    printf "%0.s═" $(seq 1 $((inner+2)))
-    printf "%b\n" "╝${N}"
-
-    printf "\n"
+    echo ""
+    sleep 3
 }
 
-# helper: intenta abrir URL (xdg-open / open / am)
-open_instagram() {
-    local url="https://instagram.com/tizi_7zz"
-    if command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$url" >/dev/null 2>&1 &
-    elif command -v open >/dev/null 2>&1; then
-        open "$url" >/dev/null 2>&1 &
-    elif command -v am >/dev/null 2>&1; then
-        am start -a android.intent.action.VIEW -d "$url" >/dev/null 2>&1
-    fi
-}
-
-# ejemplo de uso:
-# banner
-# read -n1 -rsp $'Presioná "i" para abrir Instagram o cualquier tecla para continuar...\n' key
-# [ "$key" = "i" ] && open_instagram
-
-# Función de logging
+# FunciÃ³n de logging
 log_output() {
     echo -e "${1}" | tee -a "$LOGFILE"
 }
@@ -170,21 +87,21 @@ check_storage() {
     fi
 }
 
-# Menú principal
+# MenÃº principal
 main_menu() {
     banner
-    echo -e "${B}╔════════════════════════════════════════════════════════╗${N}"
-    echo -e "${B}║                    MENÚ PRINCIPAL                      ║${N}"
-    echo -e "${B}╚════════════════════════════════════════════════════════╝${N}"
+    echo -e "${B}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+    echo -e "${B}â•‘                    MENÃš PRINCIPAL                      â•‘${N}"
+    echo -e "${B}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
     echo ""
-    echo -e "${Y}[0]${W} Conectar ADB (Pareamiento inalámbrico)${N}"
+    echo -e "${Y}[0]${W} Conectar ADB (Pareamiento inalÃ¡mbrico)${N}"
     echo -e "${G}[1]${W} Escanear Free Fire Normal${N}"
     echo -e "${G}[2]${W} Escanear Free Fire MAX${N}"
-    echo -e "${C}[3]${W} Ver último log guardado${N}"
+    echo -e "${C}[3]${W} Ver Ãºltimo log guardado${N}"
     echo -e "${M}[4]${W} Actualizar scanner${N}"
     echo -e "${R}[S]${W} Salir${N}"
     echo ""
-    echo -ne "${Y}Selecciona una opción: ${N}"
+    echo -ne "${Y}Selecciona una opciÃ³n: ${N}"
     read -r opcao
     
     case $opcao in
@@ -194,7 +111,7 @@ main_menu() {
         3) ver_ultimo_log ;;
         4) actualizar_scanner ;;
         s|S) echo -e "\n${W}Gracias por usar el scanner${N}\n"; exit 0 ;;
-        *) echo -e "${R}Opción inválida${N}"; sleep 2; main_menu ;;
+        *) echo -e "${R}OpciÃ³n invÃ¡lida${N}"; sleep 2; main_menu ;;
     esac
 }
 
@@ -210,7 +127,7 @@ actualizar_scanner() {
     git reset --hard origin/main
     git clean -f -d
     
-    echo -e "\n${G}[✓] Scanner actualizado correctamente${N}"
+    echo -e "\n${G}[âœ“] Scanner actualizado correctamente${N}"
     echo -e "${Y}[*] Reiniciando...${N}\n"
     sleep 2
     exec bash scanner.sh
@@ -221,35 +138,35 @@ conectar_adb() {
     clear
     banner
     
-    echo -e "${B}╔════════════════════════════════════════════════════════╗${N}"
-    echo -e "${B}║           INSTRUCCIONES PARA CONECTAR ADB              ║${N}"
-    echo -e "${B}╚════════════════════════════════════════════════════════╝${N}"
+    echo -e "${B}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+    echo -e "${B}â•‘           INSTRUCCIONES PARA CONECTAR ADB              â•‘${N}"
+    echo -e "${B}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
     echo -e "${W}1. Ve a: Ajustes > Opciones de Desarrollador${N}"
-    echo -e "${W}2. Activa: 'Depuración inalámbrica'${N}"
-    echo -e "${W}3. Toca: 'Vincular dispositivo mediante código'${N}"
-    echo -e "${W}4. Verás un CÓDIGO de 6 dígitos y una IP:Puerto${N}"
+    echo -e "${W}2. Activa: 'DepuraciÃ³n inalÃ¡mbrica'${N}"
+    echo -e "${W}3. Toca: 'Vincular dispositivo mediante cÃ³digo'${N}"
+    echo -e "${W}4. VerÃ¡s un CÃ“DIGO de 6 dÃ­gitos y una IP:Puerto${N}"
     echo ""
     echo -e "${Y}IMPORTANTE:${N}"
     echo -e "${C}Si dice: 192.168.1.5:${G}41429${C}, solo anota: ${G}41429${N}"
-    echo -e "${C}Si dice: Código: ${G}123456${C}, anota: ${G}123456${N}"
+    echo -e "${C}Si dice: CÃ³digo: ${G}123456${C}, anota: ${G}123456${N}"
     echo ""
     
-    echo -ne "${Y}Código de 6 dígitos: ${N}"
+    echo -ne "${Y}CÃ³digo de 6 dÃ­gitos: ${N}"
     read -r pair_code
     
     if [ ${#pair_code} -ne 6 ]; then
-        echo -e "${R}[!] Error: El código debe tener 6 dígitos${N}"
+        echo -e "${R}[!] Error: El cÃ³digo debe tener 6 dÃ­gitos${N}"
         sleep 2
         conectar_adb
         return
     fi
     
-    echo -ne "${Y}Puerto de pareamiento (solo números): ${N}"
+    echo -ne "${Y}Puerto de pareamiento (solo nÃºmeros): ${N}"
     read -r pair_port_input
     pair_port=$(echo "$pair_port_input" | grep -oE '[0-9]+$' | tail -1)
     
     if [ -z "$pair_port" ] || [ "$pair_port" -lt 1 ] || [ "$pair_port" -gt 65535 ]; then
-        echo -e "${R}[!] Error: Puerto inválido${N}"
+        echo -e "${R}[!] Error: Puerto invÃ¡lido${N}"
         sleep 2
         conectar_adb
         return
@@ -260,25 +177,25 @@ conectar_adb() {
     PAIR_RESULT=$(adb pair localhost:$pair_port $pair_code 2>&1)
     
     if echo "$PAIR_RESULT" | grep -qi "successfully\|success"; then
-        echo -e "${G}[✓] Pareamiento exitoso${N}"
+        echo -e "${G}[âœ“] Pareamiento exitoso${N}"
     else
         echo -e "${R}[!] Error en pareamiento${N}"
-        echo -e "\n${W}Presiona Enter para volver al menú...${N}"
+        echo -e "\n${W}Presiona Enter para volver al menÃº...${N}"
         read
         main_menu
         return
     fi
     
     echo ""
-    echo -e "${Y}Ahora CIERRA la ventana del código y mira ARRIBA${N}"
-    echo -e "${Y}Verás algo como: 192.168.1.5:${G}37853${N}"
+    echo -e "${Y}Ahora CIERRA la ventana del cÃ³digo y mira ARRIBA${N}"
+    echo -e "${Y}VerÃ¡s algo como: 192.168.1.5:${G}37853${N}"
     echo ""
-    echo -ne "${Y}Puerto de conexión (solo números): ${N}"
+    echo -ne "${Y}Puerto de conexiÃ³n (solo nÃºmeros): ${N}"
     read -r connect_port_input
     connect_port=$(echo "$connect_port_input" | grep -oE '[0-9]+$' | tail -1)
     
     if [ -z "$connect_port" ] || [ "$connect_port" -lt 1 ] || [ "$connect_port" -gt 65535 ]; then
-        echo -e "${R}[!] Error: Puerto inválido${N}"
+        echo -e "${R}[!] Error: Puerto invÃ¡lido${N}"
         sleep 2
         conectar_adb
         return
@@ -289,19 +206,19 @@ conectar_adb() {
     CONNECT_RESULT=$(adb connect localhost:$connect_port 2>&1)
     
     if echo "$CONNECT_RESULT" | grep -qi "connected"; then
-        echo -e "${G}[✓] Conexión exitosa${N}"
+        echo -e "${G}[âœ“] ConexiÃ³n exitosa${N}"
     else
-        echo -e "${R}[!] Error en conexión${N}"
+        echo -e "${R}[!] Error en conexiÃ³n${N}"
     fi
     
     sleep 1
     if adb devices | grep -q "device$"; then
-        echo -e "${G}[✓] Dispositivo conectado correctamente${N}"
+        echo -e "${G}[âœ“] Dispositivo conectado correctamente${N}"
     else
-        echo -e "${R}[!] El dispositivo no está conectado${N}"
+        echo -e "${R}[!] El dispositivo no estÃ¡ conectado${N}"
     fi
     
-    echo -e "\n${W}Presiona Enter para volver al menú...${N}"
+    echo -e "\n${W}Presiona Enter para volver al menÃº...${N}"
     read
     main_menu
 }
@@ -320,7 +237,7 @@ scan_ff_max() {
     ejecutar_scan
 }
 
-# Ver último log
+# Ver Ãºltimo log
 ver_ultimo_log() {
     clear
     banner
@@ -329,19 +246,19 @@ ver_ultimo_log() {
     
     if [ -z "$ULTIMO_LOG" ]; then
         echo -e "${R}[!] No se encontraron logs guardados${N}"
-        echo -e "\n${W}Presiona Enter para volver al menú...${N}"
+        echo -e "\n${W}Presiona Enter para volver al menÃº...${N}"
         read
         main_menu
         return
     fi
     
     echo -e "${B}[*] Log: $(basename "$ULTIMO_LOG")${N}"
-    echo -e "${C}════════════════════════════════════════════════════════${N}\n"
+    echo -e "${C}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}\n"
     
     cat "$ULTIMO_LOG"
     
-    echo -e "\n${C}════════════════════════════════════════════════════════${N}"
-    echo -e "${W}Presiona Enter para volver al menú...${N}"
+    echo -e "\n${C}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
+    echo -e "${W}Presiona Enter para volver al menÃº...${N}"
     read
     main_menu
 }
@@ -355,25 +272,25 @@ ejecutar_scan() {
     
     if ! adb devices | grep -q "device$"; then
         log_output "${R}[!] ERROR: No hay dispositivos conectados por ADB${N}"
-        log_output "${Y}[*] SOLUCIÓN:${N}"
-        log_output "${W}   1. Vuelve al menú principal${N}"
-        log_output "${W}   2. Selecciona opción [0] Conectar ADB${N}"
+        log_output "${Y}[*] SOLUCIÃ“N:${N}"
+        log_output "${W}   1. Vuelve al menÃº principal${N}"
+        log_output "${W}   2. Selecciona opciÃ³n [0] Conectar ADB${N}"
         log_output "${W}   3. Sigue las instrucciones${N}"
         echo ""
-        echo -e "${W}Presiona Enter para volver al menú...${N}"
+        echo -e "${W}Presiona Enter para volver al menÃº...${N}"
         read
         main_menu
         return
     fi
     
     if ! adb shell pm list packages | grep -q "$GAME_PKG"; then
-        log_output "${R}[!] $GAME_SELECTED no está instalado${N}"
+        log_output "${R}[!] $GAME_SELECTED no estÃ¡ instalado${N}"
         sleep 3
         main_menu
         return
     fi
     
-    # Ejecutar análisis
+    # Ejecutar anÃ¡lisis
     check_device_info
     check_root
     check_uptime
@@ -391,24 +308,24 @@ ejecutar_scan() {
     check_obb
     show_summary
     
-    echo -e "\n${W}Presiona Enter para volver al menú...${N}"
+    echo -e "\n${W}Presiona Enter para volver al menÃº...${N}"
     read
     main_menu
 }
 
-# [AQUÍ VAN TODAS LAS FUNCIONES DE DETECCIÓN]
+# [AQUÃ VAN TODAS LAS FUNCIONES DE DETECCIÃ“N]
 # (Las copio del artifact anterior pero resumidas)
 
 check_device_info() {
-    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}         INFORMACIÓN DEL DISPOSITIVO                   ${C}║${N}"
-    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    log_output "${C}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+    log_output "${C}â•‘${W}         INFORMACIÃ“N DEL DISPOSITIVO                   ${C}â•‘${N}"
+    log_output "${C}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
     
     ANDROID_VER=$(adb shell getprop ro.build.version.release | tr -d '\r\n')
     DEVICE_MODEL=$(adb shell getprop ro.product.model | tr -d '\r\n')
     DEVICE_BRAND=$(adb shell getprop ro.product.brand | tr -d '\r\n')
     
-    log_output "${B}[*] Versión de Android: ${W}$ANDROID_VER${N}"
+    log_output "${B}[*] VersiÃ³n de Android: ${W}$ANDROID_VER${N}"
     log_output "${B}[*] Modelo: ${W}$DEVICE_MODEL${N}"
     log_output "${B}[*] Marca: ${W}$DEVICE_BRAND${N}\n"
 }
@@ -419,7 +336,7 @@ check_root() {
         log_output "${R}[!] ROOT DETECTADO${N}\n"
         ((SUSPICIOUS_COUNT++))
     else
-        log_output "${G}[✓] No se detectó ROOT${N}\n"
+        log_output "${G}[âœ“] No se detectÃ³ ROOT${N}\n"
     fi
 }
 
@@ -441,14 +358,14 @@ check_background_scripts() {
         log_output "${R}[!] SCRIPTS DETECTADOS${N}\n"
         ((SUSPICIOUS_COUNT+=2))
     else
-        log_output "${G}[✓] Sin scripts sospechosos${N}\n"
+        log_output "${G}[âœ“] Sin scripts sospechosos${N}\n"
     fi
 }
 
 detect_shell_bypass() {
-    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}         DETECCIÓN DE BYPASS DE FUNCIONES SHELL         ${C}║${N}"
-    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    log_output "${C}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+    log_output "${C}â•‘${W}         DETECCIÃ“N DE BYPASS DE FUNCIONES SHELL         ${C}â•‘${N}"
+    log_output "${C}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
 
     BYPASS_DETECTADO=0
 
@@ -457,14 +374,14 @@ detect_shell_bypass() {
     for func in pkg git cd stat adb; do
         RESULT=$(adb shell "type $func 2>/dev/null | grep -q function && echo FUNCTION_DETECTED" 2>/dev/null | tr -d '\r')
         if echo "$RESULT" | grep -q "FUNCTION_DETECTED"; then
-            log_output "${R}[!] BYPASS DETECTADO: Función '$func' fue sobrescrita!${N}"
+            log_output "${R}[!] BYPASS DETECTADO: FunciÃ³n '$func' fue sobrescrita!${N}"
             ((SUSPICIOUS_COUNT+=2))
             BYPASS_DETECTADO=1
         fi
     done
 
-    # --- 2. Testear acceso a directorios críticos ---
-    log_output "${B}[+] Testeando acceso a directorios críticos...${N}"
+    # --- 2. Testear acceso a directorios crÃ­ticos ---
+    log_output "${B}[+] Testeando acceso a directorios crÃ­ticos...${N}"
     CRITICAL_DIRS=(
         "/system/bin"
         "/data/data/com.dts.freefireth/files"
@@ -493,7 +410,7 @@ detect_shell_bypass() {
             | grep -v 'mtk_drm_fake_vsync' \
             | grep -v 'drm_fake_vsync')
         if [ -n "$SUSPICIOUS_PROCS" ]; then
-            log_output "${R}[!] BYPASS DETECTADO: Procesos sospechosos en ejecución!${N}"
+            log_output "${R}[!] BYPASS DETECTADO: Procesos sospechosos en ejecuciÃ³n!${N}"
             log_output "${Y}[!] Procesos encontrados:${N}"
             echo "$SUSPICIOUS_PROCS" | while read -r line; do
                 [ -n "$line" ] && log_output "${Y}  $line${N}"
@@ -503,8 +420,8 @@ detect_shell_bypass() {
         fi
     fi
 
-    # --- 4. Verificar archivos de configuración del shell ---
-    log_output "${B}[+] Verificando archivos de configuración del shell...${N}"
+    # --- 4. Verificar archivos de configuraciÃ³n del shell ---
+    log_output "${B}[+] Verificando archivos de configuraciÃ³n del shell...${N}"
     CONFIG_FILES=(
         "~/.bashrc"
         "~/.bash_profile"
@@ -549,8 +466,8 @@ detect_shell_bypass() {
         fi
     fi
 
-    # --- 7. Testear manipulación de la función stat ---
-    log_output "${B}[+] Testeando manipulación de la función stat...${N}"
+    # --- 7. Testear manipulaciÃ³n de la funciÃ³n stat ---
+    log_output "${B}[+] Testeando manipulaciÃ³n de la funciÃ³n stat...${N}"
     TEST_FILE="/data/local/tmp/test_stat_$(date +%s)"
     adb shell "echo test > $TEST_FILE 2>/dev/null" >/dev/null 2>&1
     sleep 1
@@ -565,7 +482,7 @@ detect_shell_bypass() {
             DIFF_NOW=$(( TS_NOW - TS_MODIFY < 0 ? TS_MODIFY - TS_NOW : TS_NOW - TS_MODIFY ))
             DIFF_INTERNAL=$(( TS_ACCESS - TS_MODIFY < 0 ? TS_MODIFY - TS_ACCESS : TS_ACCESS - TS_MODIFY ))
             if [ "$DIFF_NOW" -gt 86400 ] || [ "$DIFF_INTERNAL" -gt 300 ]; then
-                log_output "${R}[!] BYPASS DETECTADO: Función stat retornando datos inconsistentes!${N}"
+                log_output "${R}[!] BYPASS DETECTADO: FunciÃ³n stat retornando datos inconsistentes!${N}"
                 log_output "${Y}[!] Archivo creado ahora, pero stat muestra: $MODIFY_TIME${N}"
                 ((SUSPICIOUS_COUNT+=2))
                 BYPASS_DETECTADO=1
@@ -601,8 +518,8 @@ detect_shell_bypass() {
         BYPASS_DETECTADO=1
     fi
 
-    # --- 10. Testear integridad de comandos básicos ---
-    log_output "${B}[+] Testeando integridad de comandos básicos...${N}"
+    # --- 10. Testear integridad de comandos bÃ¡sicos ---
+    log_output "${B}[+] Testeando integridad de comandos bÃ¡sicos...${N}"
     WHICH_RESULT=$(adb shell "which ls 2>/dev/null" | tr -d '\r')
     if [ -z "$WHICH_RESULT" ] || ! echo "$WHICH_RESULT" | grep -q "/system/bin/ls"; then
         log_output "${R}[!] BYPASS DETECTADO: Comando 'which' no retorna resultado esperado!${N}"
@@ -620,7 +537,7 @@ detect_shell_bypass() {
     CURRENT_YEAR=$(date +%Y)
     DATE_RESULT=$(adb shell "date +%Y 2>/dev/null" | tr -d '\r')
     if [ -z "$DATE_RESULT" ] || [ "$DATE_RESULT" != "$CURRENT_YEAR" ]; then
-        log_output "${R}[!] BYPASS DETECTADO: Comando 'date' no retorna el año esperado!${N}"
+        log_output "${R}[!] BYPASS DETECTADO: Comando 'date' no retorna el aÃ±o esperado!${N}"
         log_output "${Y}[!] Esperado: $CURRENT_YEAR  Recibido: $DATE_RESULT${N}"
         ((SUSPICIOUS_COUNT+=2))
         BYPASS_DETECTADO=1
@@ -661,15 +578,15 @@ detect_shell_bypass() {
         BYPASS_DETECTADO=1
     fi
 
-    # --- Resumen del módulo ---
+    # --- Resumen del mÃ³dulo ---
     if [ $BYPASS_DETECTADO -eq 1 ]; then
         log_output "${R}[!] ========================================${N}"
         log_output "${R}[!] BYPASS DE FUNCIONES SHELL DETECTADO!${N}"
-        log_output "${R}[!] El usuario está usando scripts maliciosos!${N}"
-        log_output "${R}[!] ¡APLICA EL W.O INMEDIATAMENTE!${N}"
+        log_output "${R}[!] El usuario estÃ¡ usando scripts maliciosos!${N}"
+        log_output "${R}[!] Â¡APLICA EL W.O INMEDIATAMENTE!${N}"
         log_output "${R}[!] ========================================${N}\n"
     else
-        log_output "${G}[✓] Ningún bypass de funciones shell detectado.${N}\n"
+        log_output "${G}[âœ“] NingÃºn bypass de funciones shell detectado.${N}\n"
     fi
 }
 
@@ -686,7 +603,7 @@ check_time_changes() {
         log_output "${R}[!] CAMBIOS DE HORA DETECTADOS${N}\n"
         ((SUSPICIOUS_COUNT++))
     else
-        log_output "${G}[✓] Sin cambios${N}\n"
+        log_output "${G}[âœ“] Sin cambios${N}\n"
     fi
 }
 
@@ -696,7 +613,7 @@ check_playstore_access() {
     if [ -n "$PLAY" ]; then
         log_output "${Y}[*] Accesos recientes detectados${N}\n"
     else
-        log_output "${G}[✓] Sin accesos${N}\n"
+        log_output "${G}[âœ“] Sin accesos${N}\n"
     fi
 }
 
@@ -706,7 +623,7 @@ check_clipboard() {
     if [ -n "$CLIP" ]; then
         log_output "${Y}[*] Textos copiados detectados${N}\n"
     else
-        log_output "${G}[✓] Sin datos${N}\n"
+        log_output "${G}[âœ“] Sin datos${N}\n"
     fi
 }
 
@@ -723,18 +640,18 @@ check_downloads() {
         fi
     done <<< "$APKS"
     if [ $FOUND -eq 0 ]; then
-        log_output "${G}[✓] Sin APKs sospechosos${N}\n"
+        log_output "${G}[âœ“] Sin APKs sospechosos${N}\n"
     else
         ((SUSPICIOUS_COUNT+=2))
         echo ""
     fi
 }
 
-# Detección de VPN/DNS/Proxy
+# DetecciÃ³n de VPN/DNS/Proxy
 check_vpn_dns() {
-    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}       DETECCIÓN DE VPN/DNS/PROXY                      ${C}║${N}"
-    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    log_output "${C}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+    log_output "${C}â•‘${W}       DETECCIÃ“N DE VPN/DNS/PROXY                      ${C}â•‘${N}"
+    log_output "${C}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
     
     # 1. Detectar VPN activas
     log_output "${B}[+] Verificando VPN activas...${N}"
@@ -794,7 +711,7 @@ check_vpn_dns() {
     fi
     
     if [ $VPN_DETECTED -eq 0 ]; then
-        log_output "${G}[✓] No se detectaron VPNs${N}"
+        log_output "${G}[âœ“] No se detectaron VPNs${N}"
     fi
     
     echo ""
@@ -811,7 +728,7 @@ check_vpn_dns() {
             log_output "${Y}  $dns${N}"
         done
         
-        # DNS públicos conocidos (sospechosos para evadir detección)
+        # DNS pÃºblicos conocidos (sospechosos para evadir detecciÃ³n)
         CUSTOM_DNS=$(echo "$DNS_SERVERS" | grep -E "1\.1\.1\.1|8\.8\.8\.8|8\.8\.4\.4|9\.9\.9\.9|208\.67\.222\.222|1\.0\.0\.1|quad9|cloudflare|google")
         
         if [ -n "$CUSTOM_DNS" ]; then
@@ -832,7 +749,7 @@ check_vpn_dns() {
         fi
         ((SUSPICIOUS_COUNT++))
     else
-        log_output "${G}[✓] DNS privado no configurado${N}"
+        log_output "${G}[âœ“] DNS privado no configurado${N}"
     fi
     
     echo ""
@@ -846,7 +763,7 @@ check_vpn_dns() {
         log_output "${R}[!] PROXY HTTP CONFIGURADO: $HTTP_PROXY${N}"
         ((SUSPICIOUS_COUNT+=2))
     else
-        log_output "${G}[✓] Sin proxy HTTP${N}"
+        log_output "${G}[âœ“] Sin proxy HTTP${N}"
     fi
     
     # Verificar variables de entorno proxy
@@ -862,22 +779,22 @@ check_vpn_dns() {
     echo ""
 }
 
-# Detección de archivos eliminados recientemente
+# DetecciÃ³n de archivos eliminados recientemente
 check_deleted_files() {
-    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}    ARCHIVOS ELIMINADOS RECIENTEMENTE (GAME DATA)      ${C}║${N}"
-    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    log_output "${C}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+    log_output "${C}â•‘${W}    ARCHIVOS ELIMINADOS RECIENTEMENTE (GAME DATA)      ${C}â•‘${N}"
+    log_output "${C}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
     
     GAME_DATA_DIR="/sdcard/Android/data/$GAME_PKG"
     GAME_OBB_DIR="/sdcard/Android/obb/$GAME_PKG"
     
     log_output "${B}[+] Analizando logs del sistema para archivos eliminados...${N}"
     
-    # Buscar logs de archivos eliminados (últimas 24 horas)
+    # Buscar logs de archivos eliminados (Ãºltimas 24 horas)
     DELETED_LOGS=$(adb logcat -d -v time 2>/dev/null | grep -iE "delete|remove|unlink" | grep -E "$GAME_PKG|freefir" | tail -20)
     
     if [ -n "$DELETED_LOGS" ]; then
-        log_output "${Y}[*] Actividad de eliminación detectada en logs:${N}"
+        log_output "${Y}[*] Actividad de eliminaciÃ³n detectada en logs:${N}"
         echo "$DELETED_LOGS" | while read -r line; do
             log_output "${W}  $line${N}"
         done
@@ -886,8 +803,8 @@ check_deleted_files() {
     
     echo ""
     
-    # Verificar carpetas vacías sospechosas
-    log_output "${B}[+] Verificando carpetas vacías sospechosas...${N}"
+    # Verificar carpetas vacÃ­as sospechosas
+    log_output "${B}[+] Verificando carpetas vacÃ­as sospechosas...${N}"
     
     CRITICAL_FOLDERS=(
         "$GAME_DATA_DIR/files/contentcache"
@@ -903,7 +820,7 @@ check_deleted_files() {
             FOLDER_NAME=$(basename "$folder")
             
             if [ "$FILE_COUNT" -eq 0 ]; then
-                log_output "${R}[!] CARPETA VACÍA SOSPECHOSA: $FOLDER_NAME${N}"
+                log_output "${R}[!] CARPETA VACÃA SOSPECHOSA: $FOLDER_NAME${N}"
                 log_output "${Y}    Ruta: $folder${N}"
                 EMPTY_DETECTED=1
                 ((SUSPICIOUS_COUNT+=2))
@@ -912,12 +829,12 @@ check_deleted_files() {
     done
     
     if [ $EMPTY_DETECTED -eq 0 ]; then
-        log_output "${G}[✓] Todas las carpetas contienen archivos${N}"
+        log_output "${G}[âœ“] Todas las carpetas contienen archivos${N}"
     fi
     
     echo ""
     
-    # Buscar archivos .tmp o temporales (indicativo de eliminación reciente)
+    # Buscar archivos .tmp o temporales (indicativo de eliminaciÃ³n reciente)
     log_output "${B}[+] Buscando archivos temporales sospechosos...${N}"
     
     TMP_FILES=$(adb shell "find '$GAME_DATA_DIR' -name '*.tmp' -o -name '*.bak' -o -name '*~' 2>/dev/null" | tr -d '\r')
@@ -930,13 +847,13 @@ check_deleted_files() {
         done
         ((SUSPICIOUS_COUNT++))
     else
-        log_output "${G}[✓] Sin archivos temporales sospechosos${N}"
+        log_output "${G}[âœ“] Sin archivos temporales sospechosos${N}"
     fi
     
     echo ""
     
     # Verificar timestamp de carpetas (si fue modificada recientemente, pueden haber borrado algo)
-    log_output "${B}[+] Verificando modificaciones recientes en carpetas críticas...${N}"
+    log_output "${B}[+] Verificando modificaciones recientes en carpetas crÃ­ticas...${N}"
     
     for folder in "${CRITICAL_FOLDERS[@]}"; do
         if adb shell "[ -d '$folder' ]" 2>/dev/null; then
@@ -948,7 +865,7 @@ check_deleted_files() {
                 CURRENT_EPOCH=$(date +%s)
                 TIME_DIFF=$((CURRENT_EPOCH - CHANGE_EPOCH))
                 
-                # Si fue modificada en las últimas 3 horas (10800 segundos)
+                # Si fue modificada en las Ãºltimas 3 horas (10800 segundos)
                 if [ $TIME_DIFF -lt 10800 ] && [ $TIME_DIFF -gt 0 ]; then
                     HOURS_AGO=$((TIME_DIFF / 3600))
                     MINS_AGO=$(((TIME_DIFF % 3600) / 60))
@@ -989,38 +906,38 @@ check_deleted_files() {
     done
     
     if [ $TRASH_FOUND -eq 0 ]; then
-        log_output "${G}[✓] Sin archivos en papelera${N}"
+        log_output "${G}[âœ“] Sin archivos en papelera${N}"
     fi
     
     echo ""
 }
 
 check_replays() {
-    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}              ANÁLISIS DE REPLAYS                      ${C}║${N}"
-    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    log_output "${C}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+    log_output "${C}â•‘${W}              ANÃLISIS DE REPLAYS                      ${C}â•‘${N}"
+    log_output "${C}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
 
     REPLAY_DIR="/sdcard/Android/data/$GAME_PKG/files/MReplays"
     MOTIVOS=()
 
-    # ── Obtener lista de .bin ordenados por fecha (más reciente primero) ──
+    # â”€â”€ Obtener lista de .bin ordenados por fecha (mÃ¡s reciente primero) â”€â”€
     BINS_RAW=$(adb shell "ls -t '$REPLAY_DIR'/*.bin 2>/dev/null" | tr -d '\r')
 
-    # Motivo 10 – Sin replays
+    # Motivo 10 â€“ Sin replays
     if [ -z "$(echo "$BINS_RAW" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] Sin replays en la carpeta MReplays (sospechoso)${N}"
-        MOTIVOS+=("Motivo 10 - Ningún archivo .bin encontrado en MReplays")
+        MOTIVOS+=("Motivo 10 - NingÃºn archivo .bin encontrado en MReplays")
         ((SUSPICIOUS_COUNT+=2))
     fi
 
-    # ── Obtener versión instalada del juego (para Motivo 14) ──
+    # â”€â”€ Obtener versiÃ³n instalada del juego (para Motivo 14) â”€â”€
     GAME_VERSION_INSTALLED=""
     DUMPSYS_PKG=$(adb shell "dumpsys package $GAME_PKG 2>/dev/null" | tr -d '\r')
     if [ -n "$DUMPSYS_PKG" ]; then
         GAME_VERSION_INSTALLED=$(echo "$DUMPSYS_PKG" | grep "versionName=" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     fi
 
-    # ── Motivo 13 – Dueño y grupo iguales (via ls -l) ──
+    # â”€â”€ Motivo 13 â€“ DueÃ±o y grupo iguales (via ls -l) â”€â”€
     LS_L=$(adb shell "ls -l '$REPLAY_DIR'/*.bin 2>/dev/null" | tr -d '\r')
     while read -r linea; do
         [ -z "$linea" ] && continue
@@ -1028,11 +945,11 @@ check_replays() {
         GRUPO=$(echo "$linea" | awk '{print $4}')
         FNAME=$(basename "$(echo "$linea" | awk '{print $NF}')")
         if [ -n "$DONO" ] && [ "$DONO" = "$GRUPO" ]; then
-            MOTIVOS+=("Motivo 13 - Dueño y grupo iguales ($DONO): $FNAME")
+            MOTIVOS+=("Motivo 13 - DueÃ±o y grupo iguales ($DONO): $FNAME")
         fi
     done <<< "$LS_L"
 
-    # ── Variables para cruzar con la carpeta ──
+    # â”€â”€ Variables para cruzar con la carpeta â”€â”€
     ULTIMO_MODIFY_TS=0
     ULTIMO_CHANGE_TS=0
     ARCHIVO_MAS_RECIENTE=""
@@ -1054,7 +971,7 @@ check_replays() {
         TS_M=$(date -d "${DM%%.*}" +%s 2>/dev/null || echo 0)
         TS_C=$(date -d "${DC%%.*}" +%s 2>/dev/null || echo 0)
 
-        # Guardar timestamps del archivo más reciente para cruces con la carpeta
+        # Guardar timestamps del archivo mÃ¡s reciente para cruces con la carpeta
         if [ $PRIMER_ARCHIVO -eq 1 ]; then
             ULTIMO_MODIFY_TS=$TS_M
             ULTIMO_CHANGE_TS=$TS_C
@@ -1062,12 +979,12 @@ check_replays() {
             PRIMER_ARCHIVO=0
         fi
 
-        # Motivo 1 – Access posterior a Modify
+        # Motivo 1 â€“ Access posterior a Modify
         if [ "$TS_A" -gt "$TS_M" ] 2>/dev/null; then
             MOTIVOS+=("Motivo 1 - Access posterior a Modify: $FNAME")
         fi
 
-        # Motivo 2 – Timestamps con milisegundos .000
+        # Motivo 2 â€“ Timestamps con milisegundos .000
         NANOS_A=$(echo "$DA" | grep -oE '\.[0-9]+$')
         NANOS_M=$(echo "$DM" | grep -oE '\.[0-9]+$')
         NANOS_C=$(echo "$DC" | grep -oE '\.[0-9]+$')
@@ -1075,12 +992,12 @@ check_replays() {
             MOTIVOS+=("Motivo 2 - Timestamps con milisegundos .000: $FNAME")
         fi
 
-        # Motivo 3 – Modify ≠ Change en el archivo
+        # Motivo 3 â€“ Modify â‰  Change en el archivo
         if [ "$DM" != "$DC" ]; then
-            MOTIVOS+=("Motivo 3 - Modify ≠ Change en el archivo: $FNAME")
+            MOTIVOS+=("Motivo 3 - Modify â‰  Change en el archivo: $FNAME")
         fi
 
-        # Motivo 4 – Nombre del archivo no coincide con Modify (diff > 1 segundo)
+        # Motivo 4 â€“ Nombre del archivo no coincide con Modify (diff > 1 segundo)
         NAME_DATE=$(echo "$FNAME" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1)
         if [ -n "$NAME_DATE" ]; then
             NAME_NORMALIZED=$(echo "$NAME_DATE" | sed 's/^\([0-9]\{4\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)$/\1-\2-\3 \4:\5:\6/')
@@ -1091,7 +1008,7 @@ check_replays() {
             fi
         fi
 
-        # Motivo 8 – Access del .json diferente a los tiempos del .bin / .json ausente
+        # Motivo 8 â€“ Access del .json diferente a los tiempos del .bin / .json ausente
         JSON_PATH="${bin%.bin}.json"
         JSON_STAT=$(adb shell "stat '$JSON_PATH' 2>/dev/null" | tr -d '\r')
         if [ -z "$JSON_STAT" ]; then
@@ -1103,20 +1020,20 @@ check_replays() {
             fi
         fi
 
-        # Motivo 14 – Versión del replay no coincide con la del juego instalado
+        # Motivo 14 â€“ VersiÃ³n del replay no coincide con la del juego instalado
         if [ -n "$GAME_VERSION_INSTALLED" ]; then
             JSON_CONTENT=$(adb shell "cat '$JSON_PATH' 2>/dev/null" | tr -d '\r')
             if [ -n "$JSON_CONTENT" ]; then
                 VERSION_JSON=$(echo "$JSON_CONTENT" | grep -oE '"Version":"[^"]*"' | grep -oE ':[^}]*' | tr -d ':"')
                 if [ -n "$VERSION_JSON" ] && [ "$VERSION_JSON" != "$GAME_VERSION_INSTALLED" ]; then
-                    MOTIVOS+=("Motivo 14 - Replay no es del dispositivo (versión replay: $VERSION_JSON, juego: $GAME_VERSION_INSTALLED): $(basename "$JSON_PATH")")
+                    MOTIVOS+=("Motivo 14 - Replay no es del dispositivo (versiÃ³n replay: $VERSION_JSON, juego: $GAME_VERSION_INSTALLED): $(basename "$JSON_PATH")")
                 fi
             fi
         fi
 
     done <<< "$BINS_RAW"
 
-    # ── Verificaciones sobre la carpeta MReplays ──
+    # â”€â”€ Verificaciones sobre la carpeta MReplays â”€â”€
     PASTA_STAT=$(adb shell "stat '$REPLAY_DIR' 2>/dev/null" | tr -d '\r')
     if [ -n "$PASTA_STAT" ]; then
         PA=$(echo "$PASTA_STAT" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
@@ -1126,27 +1043,27 @@ check_replays() {
         TS_PM=$(date -d "${PM%%.*}" +%s 2>/dev/null || echo 0)
         TS_PC=$(date -d "${PC%%.*}" +%s 2>/dev/null || echo 0)
 
-        # Motivo 5 – Access = Modify = Change en carpeta (todos idénticos)
+        # Motivo 5 â€“ Access = Modify = Change en carpeta (todos idÃ©nticos)
         if [ "$PA" = "$PM" ] && [ "$PM" = "$PC" ] && [ -n "$PA" ]; then
-            MOTIVOS+=("Motivo 5 - Access, Modify y Change idénticos en carpeta MReplays")
+            MOTIVOS+=("Motivo 5 - Access, Modify y Change idÃ©nticos en carpeta MReplays")
         fi
 
-        # Motivo 6 – Milisegundos .000 en Modify o Change de la carpeta
+        # Motivo 6 â€“ Milisegundos .000 en Modify o Change de la carpeta
         PM_NANOS=$(echo "$PM" | grep -oE '\.[0-9]+$')
         PC_NANOS=$(echo "$PC" | grep -oE '\.[0-9]+$')
         if echo "$PM_NANOS$PC_NANOS" | grep -qE '\.0+$'; then
             MOTIVOS+=("Motivo 6 - Milisegundos .000 en carpeta MReplays")
         fi
 
-        # Motivo 7 – Carpeta modificada después del último replay
+        # Motivo 7 â€“ Carpeta modificada despuÃ©s del Ãºltimo replay
         if [ "$TS_PM" -gt "$ULTIMO_MODIFY_TS" ] && [ "$ULTIMO_MODIFY_TS" -gt 0 ] 2>/dev/null; then
-            MOTIVOS+=("Motivo 7 - Carpeta MReplays modificada después del último replay (Modify)")
+            MOTIVOS+=("Motivo 7 - Carpeta MReplays modificada despuÃ©s del Ãºltimo replay (Modify)")
         fi
         if [ "$TS_PC" -gt "$ULTIMO_CHANGE_TS" ] && [ "$ULTIMO_CHANGE_TS" -gt 0 ] 2>/dev/null; then
-            MOTIVOS+=("Motivo 7 - Carpeta MReplays modificada después del último replay (Change)")
+            MOTIVOS+=("Motivo 7 - Carpeta MReplays modificada despuÃ©s del Ãºltimo replay (Change)")
         fi
 
-        # Motivo 9 – Nombre no coincide con Modify de carpeta + milisegundos sospechosos
+        # Motivo 9 â€“ Nombre no coincide con Modify de carpeta + milisegundos sospechosos
         if [ -n "$ARCHIVO_MAS_RECIENTE" ]; then
             NAME_DATE2=$(basename "$ARCHIVO_MAS_RECIENTE" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1)
             if [ -n "$NAME_DATE2" ]; then
@@ -1164,12 +1081,12 @@ check_replays() {
             fi
         fi
 
-        # Motivo 11 – Modify ≠ Change en carpeta
+        # Motivo 11 â€“ Modify â‰  Change en carpeta
         if [ "$PM" != "$PC" ] && [ -n "$PM" ]; then
-            MOTIVOS+=("Motivo 11 - Modify ≠ Change en carpeta MReplays")
+            MOTIVOS+=("Motivo 11 - Modify â‰  Change en carpeta MReplays")
         fi
 
-        # Motivo 12 – Change de carpeta no coincide con Access del .bin o .json más reciente
+        # Motivo 12 â€“ Change de carpeta no coincide con Access del .bin o .json mÃ¡s reciente
         if [ -n "$ARCHIVO_MAS_RECIENTE" ]; then
             BIN_STAT_12=$(adb shell "stat '$ARCHIVO_MAS_RECIENTE' 2>/dev/null" | tr -d '\r')
             BIN_ACCESS_12=$(echo "$BIN_STAT_12" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | tail -1)
@@ -1184,16 +1101,16 @@ check_replays() {
             fi
         fi
 
-        # ── Info extra: fecha acceso carpeta vs fecha instalación del juego ──
+        # â”€â”€ Info extra: fecha acceso carpeta vs fecha instalaciÃ³n del juego â”€â”€
         INSTALL_TIME=$(adb shell "dumpsys package $GAME_PKG 2>/dev/null | grep firstInstallTime" | tr -d '\r' | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1)
         if [ -n "$PA" ] && [ -n "$INSTALL_TIME" ]; then
             log_output "${Y}[*] Acceso carpeta MReplays: ${PA%%.*}${N}"
-            log_output "${Y}[*] Instalación del juego:   $INSTALL_TIME${N}"
+            log_output "${Y}[*] InstalaciÃ³n del juego:   $INSTALL_TIME${N}"
             log_output "${W}[#] Verifica si el juego fue reinstalado justo antes de la partida comparando estas fechas.${N}"
         fi
     fi
 
-    # ── Resultado final ──
+    # â”€â”€ Resultado final â”€â”€
     echo ""
     if [ ${#MOTIVOS[@]} -gt 0 ]; then
         log_output "${R}[!] REPLAY PASADO DETECTADO - Aplica el W.O!${N}"
@@ -1202,7 +1119,7 @@ check_replays() {
         done
         ((SUSPICIOUS_COUNT+=3))
     else
-        log_output "${G}[✓] Ningún replay fue pasado y la carpeta MReplays está normal.${N}"
+        log_output "${G}[âœ“] NingÃºn replay fue pasado y la carpeta MReplays estÃ¡ normal.${N}"
     fi
     echo ""
 }
@@ -1213,18 +1130,18 @@ check_wallhack_bypass() {
     SHADERS=$(adb shell "find '$SHADER_DIR' -name 'shader*' 2>/dev/null" | tr -d '\r' | head -3)
     
     if [ -z "$SHADERS" ]; then
-        log_output "${G}[✓] Sin shaders modificados${N}\n"
+        log_output "${G}[âœ“] Sin shaders modificados${N}\n"
         return
     fi
     
     echo "$SHADERS" | while read -r shader; do
         UNITY=$(adb shell "head -c 7 '$shader' 2>/dev/null")
         if [ "$UNITY" != "UnityFS" ]; then
-            log_output "${R}[!] SHADER INVÁLIDO: $(basename "$shader")${N}"
+            log_output "${R}[!] SHADER INVÃLIDO: $(basename "$shader")${N}"
             ((SUSPICIOUS_COUNT+=3))
         fi
     done
-    log_output "${G}[✓] Verificación completada${N}\n"
+    log_output "${G}[âœ“] VerificaciÃ³n completada${N}\n"
 }
 
 check_obb() {
@@ -1234,30 +1151,30 @@ check_obb() {
         log_output "${R}[!] OBB no encontrado${N}\n"
         ((SUSPICIOUS_COUNT++))
     else
-        log_output "${G}[✓] OBB presente${N}\n"
+        log_output "${G}[âœ“] OBB presente${N}\n"
     fi
 }
 
 show_summary() {
-    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}              RESUMEN DEL ANÁLISIS                     ${C}║${N}"
-    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    log_output "${C}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+    log_output "${C}â•‘${W}              RESUMEN DEL ANÃLISIS                     ${C}â•‘${N}"
+    log_output "${C}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
     
     log_output "${B}[*] Juego: ${W}$GAME_SELECTED${N}"
     log_output "${B}[*] Elementos sospechosos: ${W}$SUSPICIOUS_COUNT${N}\n"
     
     if [ $SUSPICIOUS_COUNT -eq 0 ]; then
-        log_output "${G}╔════════════════════════════════════════════════════════╗${N}"
-        log_output "${G}║              ✓ DISPOSITIVO LIMPIO ✓                   ║${N}"
-        log_output "${G}╚════════════════════════════════════════════════════════╝${N}"
+        log_output "${G}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+        log_output "${G}â•‘              âœ“ DISPOSITIVO LIMPIO âœ“                   â•‘${N}"
+        log_output "${G}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
     elif [ $SUSPICIOUS_COUNT -le 3 ]; then
-        log_output "${Y}╔════════════════════════════════════════════════════════╗${N}"
-        log_output "${Y}║         ⚠ ADVERTENCIA: REVISAR MANUALMENTE ⚠          ║${N}"
-        log_output "${Y}╚════════════════════════════════════════════════════════╝${N}"
+        log_output "${Y}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+        log_output "${Y}â•‘         âš  ADVERTENCIA: REVISAR MANUALMENTE âš           â•‘${N}"
+        log_output "${Y}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
     else
-        log_output "${R}╔════════════════════════════════════════════════════════╗${N}"
-        log_output "${R}║          ✗ ALTO RIESGO DE CHEATS ✗                    ║${N}"
-        log_output "${R}╚════════════════════════════════════════════════════════╝${N}"
+        log_output "${R}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${N}"
+        log_output "${R}â•‘          âœ— ALTO RIESGO DE CHEATS âœ—                    â•‘${N}"
+        log_output "${R}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${N}"
     fi
     
     log_output "\n${M}[*] Log guardado: ${W}$LOGFILE${N}"
