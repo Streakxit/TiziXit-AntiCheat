@@ -27,8 +27,9 @@ GAME_PKG=""
 banner() {
     clear
     echo -e "${C}╔════════════════════════════════════════════════════════╗${N}"
-    echo -e "${C}║${M}          CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM          ${C}║${N}"
-    echo -e "${C}║${M}                   VERSIÓN BETA 1.0                     ${C}║${N}"
+    echo -e "${C}║${M}          CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM            ${C}║${N}"
+    echo -e "${C}║${M}                   VERSIÓN BETA 1.0
+   ${C}║${N}"                       mi discord gg/lskcheats
     echo -e "${C}╚════════════════════════════════════════════════════════╝${N}"
     echo -e "${Y}╔════════════════════════════════════════════════════════╗${N}"
     echo -e "${Y}║  ⚠️  ESTE SCANNER ESTÁ EN PROCESO DE DESARROLLO  ⚠️    ║${N}"
