@@ -23,61 +23,138 @@ SUSPICIOUS_COUNT=0
 GAME_SELECTED=""
 GAME_PKG=""
 
+# guarda el logo oficial (instagram-logo.svg)
+cat > instagram-logo.svg <<'SVG'
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" aria-labelledby="title">
+  <title>Instagram logo</title>
+  <defs>
+    <linearGradient id="ig-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#feda75"/>
+      <stop offset="25%" stop-color="#fa7e1e"/>
+      <stop offset="50%" stop-color="#d62976"/>
+      <stop offset="75%" stop-color="#962fbf"/>
+      <stop offset="100%" stop-color="#4f5bd5"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feOffset dx="0" dy="6" result="o"/>
+      <feBlend in="SourceGraphic" in2="o"/>
+    </filter>
+  </defs>
 
+  <rect x="32" y="32" width="448" height="448" rx="96" ry="96" fill="url(#ig-grad)" />
+  <rect x="32" y="32" width="448" height="448" rx="96" ry="96" fill="none" filter="url(#shadow)"/>
+
+  <rect x="140" y="156" width="232" height="200" rx="48" ry="48"
+        fill="none" stroke="#ffffff" stroke-width="28" stroke-linejoin="round"/>
+  <circle cx="256" cy="256" r="56" fill="none" stroke="#ffffff" stroke-width="28" />
+  <circle cx="352" cy="180" r="16" fill="#ffffff" />
+</svg>
+SVG
+
+# Banner con "botón" que usa OSC 8 (clickeable en terminales compatibles)
 banner() {
     clear
+    local cols=$(tput cols 2>/dev/null || echo 80)
+    local width=$(( cols > 70 ? 70 : cols ))
+    local inner=$(( width - 4 ))
+    local esc=$'\e'
 
-    local width=58
-    local inner=$((width-2))
-
-    local top="╔"
-    local bottom="╚"
-    for i in $(seq 1 $inner); do
-        top+="═"
-        bottom+="═"
-    done
-    top+="╗"
-    bottom+="╝"
-
-    _center() {
-        local text="$1"
-        local len=${#text}
-        local left=$(( (inner - len) / 2 ))
-        local right=$(( inner - len - left ))
-        printf "%${left}s%s%${right}s" "" "$text" ""
+    border_top() {
+        printf "%b" "${C}╔"
+        printf "%0.s═" $(seq 1 $((inner+2)))
+        printf "%b\n" "╗${N}"
+    }
+    border_bottom() {
+        printf "%b" "${C}╚"
+        printf "%0.s═" $(seq 1 $((inner+2)))
+        printf "%b\n" "╝${N}"
     }
 
-    _center_print_link() {
+    center() {
         local text="$1"
-        local url="$2"
         local len=${#text}
+        [ $len -gt $inner ] && text="${text:0:$inner}" && len=${#text}
         local left=$(( (inner - len) / 2 ))
         local right=$(( inner - len - left ))
-        printf "%b\n" "${C}║${M}$(printf '%*s' "$left" '')\e]8;;${url}\e\\${text}\e]8;;\e\\$(printf '%*s' "$right" '')${C}║${N}"
+        printf "%*s%s%*s" "$left" "" "$text" "$right" ""
     }
 
-    printf "%b\n" "${C}${top}${N}"
-    printf "%b\n" "${C}║${M}$( _center "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM" )${C}║${N}"
-    printf "%b\n" "${C}║${M}$( _center "VERSIÓN BETA 1.0" )${C}║${N}"
-    printf "%b\n" "${C}║${M}$( _center "mi discord gg/lskcheats" )${C}║${N}"
-    printf "%b\n" "${C}║${M}$( _center "Cualquier ayuda o sugerencia sobre el análisis de bypass será recibida en mi Instagram." )${C}║${N}"
-    printf "%b\n" "${C}║${M}$( _center "Si encontrás un bug o fallo, avisame por Instagram." )${C}║${N}"
+    line() {
+        printf "%b" "${C}║${N}"
+        printf "%b" "${M}%s${N}" "$(center "$1")"
+        printf "%b\n" "${C}║${N}"
+    }
 
-    _center_print_link "Instagram" "https://instagram.com/tizi_7zz"
+    ig_box() {
+        local url="https://instagram.com/tizi_7zz"
+        local label=" INSTAGRAM "
+        local len=${#label}
+        local top="┌$(printf '─%.0s' $(seq 1 $len))┐"
+        local mid="│${label}│"
+        local bot="└$(printf '─%.0s' $(seq 1 $len))┘"
+        local link_start="${esc}]8;;${url}${esc}\\"
+        local link_end="${esc}]8;;${esc}\\"
 
-    printf "%b\n" "${C}${bottom}${N}"
+        printf "%b" "${C}║${N}"
+        printf "%b" "${M}%s${N}" "$(center "$top")"
+        printf "%b\n" "${C}║${N}"
 
-    echo ""
+        printf "%b" "${C}║${N}"
+        local left=$(( (inner - ${#mid}) / 2 ))
+        [ $left -lt 0 ] && left=0
+        printf "%b" "${M}%*s${N}" "$left" ""
+        printf "%b" "${link_start}${M}${mid}${link_end}${N}"
+        local right=$(( inner - left - ${#mid} ))
+        [ $right -lt 0 ] && right=0
+        printf "%b" "${M}%*s${N}" "$right" ""
+        printf "%b\n" "${C}║${N}"
 
-    printf "%b\n" "${Y}${top}${N}"
-    printf "%b\n" "${Y}║$( _center "⚠️  ESTE SCANNER ESTÁ EN PROCESO DE DESARROLLO  ⚠️" )║${N}"
-    printf "%b\n" "${Y}║$( _center "SE RECOMIENDA HACER REVISIÓN MANUAL ADICIONAL" )║${N}"
-    printf "%b\n" "${Y}║$( _center "PARA MAYOR SEGURIDAD Y PRECISIÓN" )║${N}"
-    printf "%b\n" "${Y}${bottom}${N}"
+        printf "%b" "${C}║${N}"
+        printf "%b" "${M}%s${N}" "$(center "$bot")"
+        printf "%b\n" "${C}║${N}"
+    }
 
-    echo ""
-    sleep 3
+    border_top
+    line "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM"
+    line "VERSIÓN BETA 1.0"
+    line "mi discord gg/lskcheats"
+    line "Reportes y sugerencias por Instagram"
+    ig_box
+    border_bottom
+
+    printf "\n"
+
+    printf "%b" "${Y}╔"
+    printf "%0.s═" $(seq 1 $((inner+2)))
+    printf "%b\n" "╗${N}"
+    printf "%b" "${Y}║$(center '⚠️  SCANNER EN DESARROLLO  ⚠️')║${N}\n"
+    printf "%b" "${Y}║$(center 'SE RECOMIENDA REVISIÓN MANUAL')║${N}\n"
+    printf "%b" "${Y}║$(center 'PARA MAYOR PRECISIÓN')║${N}\n"
+    printf "%b" "${Y}╚"
+    printf "%0.s═" $(seq 1 $((inner+2)))
+    printf "%b\n" "╝${N}"
+
+    printf "\n"
 }
+
+# helper: intenta abrir URL (xdg-open / open / am)
+open_instagram() {
+    local url="https://instagram.com/tizi_7zz"
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$url" >/dev/null 2>&1 &
+    elif command -v open >/dev/null 2>&1; then
+        open "$url" >/dev/null 2>&1 &
+    elif command -v am >/dev/null 2>&1; then
+        am start -a android.intent.action.VIEW -d "$url" >/dev/null 2>&1
+    fi
+}
+
+# ejemplo de uso:
+# banner
+# read -n1 -rsp $'Presioná "i" para abrir Instagram o cualquier tecla para continuar...\n' key
+# [ "$key" = "i" ] && open_instagram
 
 # Función de logging
 log_output() {
