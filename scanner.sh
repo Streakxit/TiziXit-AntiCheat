@@ -1242,6 +1242,21 @@ check_tooling() {
   fi
 }
 
+maintenance_mode() {
+    clear
+    banner
+    echo -e "${Y}╔════════════════════════════════════════════════════════╗${N}"
+    echo -e "${Y}║                 SCANNER EN MANTENIMIENTO              ║${N}"
+    echo -e "${Y}╚════════════════════════════════════════════════════════╝${N}"
+    echo ""
+    echo -e "${W}El scanner está temporalmente fuera de servicio.${N}"
+    echo -e "${W}Volvé a intentarlo más tarde.${N}"
+    echo ""
+    echo -e "${C}Presiona Enter para volver al menú...${N}"
+    read
+    main_menu
+}
+
 # Iniciar
 check_storage
 main_menu
