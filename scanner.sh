@@ -1178,6 +1178,70 @@ show_summary() {
     log_output "\n${M}[*] Log guardado: ${W}$LOGFILE${N}"
 }
 
+# ==============================
+# HOOK DETECTION (Frida / Xposed)
+# ==============================
+check_hooks() {
+  echo "[*] Checking hooking frameworks..."
+
+  if ps -A 2>/dev/null | grep -qiE "frida|xposed|lsposed|zygisk|riru"; then
+    echo "[!] Hook framework detected (process)"
+  fi
+
+  if find /data /system 2>/dev/null | grep -qiE "frida|xposed|lsposed"; then
+    echo "[!] Hook framework detected (files)"
+  fi
+}
+
+# ==============================
+# ADVANCED ROOT / BYPASS
+# ==============================
+check_root_bypass() {
+  echo "[*] Checking advanced root/bypass..."
+
+  if (getprop 2>/dev/null; ps -A 2>/dev/null; ls /data/adb 2>/dev/null) | grep -qiE "magisk|shamiko|zygisk|busybox|brevent"; then
+    echo "[!] Root bypass / hidden root detected"
+  fi
+}
+
+# ==============================
+# FAKE TIME DETECTION
+# ==============================
+check_fake_time() {
+  echo "[*] Checking fake time..."
+
+  t1=$(date +%s 2>/dev/null)
+  sleep 1
+  t2=$(date +%s 2>/dev/null)
+
+  if [ -n "$t1" ] && [ -n "$t2" ]; then
+    diff=$((t2 - t1))
+    if [ "$diff" -lt 1 ]; then
+      echo "[!] Possible frozen/fake time detected"
+    fi
+  fi
+
+  test_file="/data/local/tmp/.time_test"
+  echo "test" > "$test_file" 2>/dev/null
+
+  if stat "$test_file" 2>/dev/null | grep -qi "1970"; then
+    echo "[!] Time inconsistency detected (stat)"
+  fi
+
+  rm -f "$test_file" 2>/dev/null
+}
+
+# ==============================
+# TOOLING / EMULATOR DETECTION
+# ==============================
+check_tooling() {
+  echo "[*] Checking suspicious tools..."
+
+  if (ps -A 2>/dev/null; getprop 2>/dev/null) | grep -qiE "vysor|frida-server|qemu|genymotion|virtual|panda|redmi"; then
+    echo "[!] Suspicious environment/tool detected"
+  fi
+}
+
 # Iniciar
 check_storage
 main_menu
