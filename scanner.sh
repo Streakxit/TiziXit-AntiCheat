@@ -1254,7 +1254,7 @@ maintenance_mode() {
     echo ""
     echo -e "${C}Presiona Enter para volver al menú...${N}"
     read
-    main_menu
+    exit 0
 }
 
 # Iniciar
