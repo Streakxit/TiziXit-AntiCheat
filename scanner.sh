@@ -1259,5 +1259,5 @@ maintenance_mode() {
 
 # Iniciar
 check_storage
-main_menu
+maintenance_mode
 
