@@ -178,6 +178,7 @@ ejecutar_scan() {
         sleep 3; main_menu; return
     fi
 
+    check_hwid_ban
     check_device_info
     check_root
     check_uptime
@@ -195,6 +196,17 @@ ejecutar_scan() {
     check_root_bypass
     check_fake_time
     check_tooling
+    check_selinux
+    check_boot_state
+    check_kernel
+    check_suspicious_packages
+    check_network_ports
+    check_adb_connections
+    check_uninstalled_apps
+    check_media_projection
+    check_data_local_tmp
+    check_dropbox_crashes
+    check_auto_time
     show_summary
 
     echo -e "\n${W}Presiona Enter para volver al menú...${N}"; read
@@ -204,6 +216,90 @@ ejecutar_scan() {
 # ─────────────────────────────────────────────────────────────
 #  MÓDULOS
 # ─────────────────────────────────────────────────────────────
+
+check_hwid_ban() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}         DETECCIÓN DE BAN POR HWID                     ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    BAN_FOUND=0
+
+    # ── Serial del hardware (SoC) vs getprop ──────────────────
+    log_output "${B}[+] Verificando serial de hardware...${N}"
+    HW_SERIAL=$(adb shell 'cat /sys/devices/soc0/serial_num 2>/dev/null || cat /sys/bus/soc/devices/soc0/serial_num 2>/dev/null || cat /sys/devices/system/soc/soc0/serial_num 2>/dev/null' | tr -d '\r\n')
+    PROP_SERIAL=$(adb shell "getprop ro.serialno 2>/dev/null" | tr -d '\r\n')
+    BOOT_SERIAL=$(adb shell "getprop ro.boot.serialno 2>/dev/null" | tr -d '\r\n')
+
+    log_output "${B}[*] Serial SoC:    ${W}${HW_SERIAL:-no disponible}${N}"
+    log_output "${B}[*] ro.serialno:   ${W}${PROP_SERIAL:-vacío}${N}"
+    log_output "${B}[*] boot.serialno: ${W}${BOOT_SERIAL:-vacío}${N}"
+
+    # Serial todo 9s o 0s = banido/spoofed
+    if echo "$PROP_SERIAL" | grep -qE '^9{4,}|^0{4,}'; then
+        log_output "${R}[!] SERIAL BANIDO/SPOOFED: $PROP_SERIAL${N}"
+        ((SUSPICIOUS_COUNT+=3)); BAN_FOUND=1
+    fi
+
+    # Serial del SoC difiere del prop (spoofer activo)
+    if [ -n "$HW_SERIAL" ] && [ -n "$PROP_SERIAL" ] && [ "$HW_SERIAL" != "$PROP_SERIAL" ]; then
+        log_output "${R}[!] Serial adulterado — SoC: $HW_SERIAL ≠ prop: $PROP_SERIAL${N}"
+        ((SUSPICIOUS_COUNT+=2)); BAN_FOUND=1
+    fi
+
+    # ── UID del juego en logcat (patrón de ban) ───────────────
+    log_output "${B}[+] Verificando UID del juego en logcat...${N}"
+    GAME_UID=$(adb shell "logcat -d -b uid 2>/dev/null | grep -oE '\"uid\"\\s*:\\s*\"?([0-9]{4,})\"?' | grep -oE '[0-9]{4,}' | tail -1" | tr -d '\r')
+    if [ -z "$GAME_UID" ]; then
+        # Fallback: pm dump para obtener el UID del paquete
+        GAME_UID=$(adb shell "dumpsys package $GAME_PKG 2>/dev/null | grep 'userId=' | head -1 | grep -oE '[0-9]+'" | tr -d '\r')
+    fi
+
+    if [ -n "$GAME_UID" ]; then
+        log_output "${B}[*] UID detectado: ${W}$GAME_UID${N}"
+        if echo "$GAME_UID" | grep -qE '^9{4,}|^0{4,}'; then
+            log_output "${R}[!] UID con patrón de BAN: $GAME_UID${N}"
+            ((SUSPICIOUS_COUNT+=3)); BAN_FOUND=1
+        fi
+    else
+        log_output "${Y}[*] No se pudo obtener UID del juego${N}"
+    fi
+
+    # ── androidboot.ulcnt (unlock counter) ───────────────────
+    log_output "${B}[+] Verificando unlock counter...${N}"
+    ULCNT_RAW=$(adb shell "cat /proc/cmdline 2>/dev/null" | tr '\0' ' ' | tr -d '\r')
+    ULCNT=$(echo "$ULCNT_RAW" | grep -oE 'androidboot\.ulcnt=[0-9]+' | grep -oE '[0-9]+$')
+    if [ -n "$ULCNT" ] && [ "$ULCNT" -gt 0 ] 2>/dev/null; then
+        log_output "${Y}[!] androidboot.ulcnt=$ULCNT — bootloader desbloqueado al menos $ULCNT vez/veces${N}"
+        ((SUSPICIOUS_COUNT++))
+    else
+        log_output "${G}[✓] ulcnt=0 o no disponible${N}"
+    fi
+
+    # ── Mensajes de ban en logcat ─────────────────────────────
+    log_output "${B}[+] Buscando mensajes de ban en logcat...${N}"
+    BAN_LOG=$(adb shell "logcat -d 2>/dev/null | grep -iE 'hwid.*ban|ban.*hwid|device.*ban|banned.*device|account.*ban' | grep -viE 'knox|samsung|ok' | tail -5" | tr -d '\r')
+    if [ -n "$(echo "$BAN_LOG" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] Mensajes de ban detectados en logcat:${N}"
+        echo "$BAN_LOG" | while read -r line; do [ -n "$line" ] && log_output "${Y}  $line${N}"; done
+        ((SUSPICIOUS_COUNT+=2)); BAN_FOUND=1
+    fi
+
+    # ── SSH keys / authorized_keys (bypass de ban via SSH tunnel) ──
+    log_output "${B}[+] Verificando claves SSH sospechosas...${N}"
+    SSH_KEYS=$(adb shell "find /data/adb /data/local /sdcard 2>/dev/null -maxdepth 4 \( -name 'authorized_keys' -o -name 'id_rsa' -o -name 'id_ed25519' -o -name 'known_hosts' \) | head -5" | tr -d '\r')
+    if [ -n "$(echo "$SSH_KEYS" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] Claves SSH encontradas (posible tunnel para evadir ban):${N}"
+        echo "$SSH_KEYS" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
+        ((SUSPICIOUS_COUNT+=2)); BAN_FOUND=1
+    fi
+
+    if [ $BAN_FOUND -eq 0 ]; then
+        log_output "${G}[✓] Sin indicadores de ban por HWID${N}"
+    else
+        log_output "${R}[!] INDICADORES DE BAN DETECTADOS${N}"
+    fi
+    echo ""
+}
 
 check_device_info() {
     log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
@@ -716,6 +812,471 @@ check_tooling() {
     echo ""
 }
 
+# ─────────────────────────────────────────────────────────────
+#  MÓDULOS NUEVOS (portados de KellerSS)
+# ─────────────────────────────────────────────────────────────
+
+check_selinux() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}         ESTADO DE SELINUX                             ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    SE=$(adb shell "getenforce 2>/dev/null" | tr -d '\r')
+    case "$SE" in
+        Enforcing)
+            log_output "${G}[✓] SELinux: Enforcing${N}" ;;
+        Permissive)
+            log_output "${R}[!] SELinux PERMISSIVO — común en dispositivos rooteados${N}"
+            ((SUSPICIOUS_COUNT+=2)) ;;
+        Disabled)
+            log_output "${R}[!] SELinux DESACTIVADO${N}"
+            ((SUSPICIOUS_COUNT+=3)) ;;
+        *)
+            log_output "${Y}[*] SELinux: estado desconocido ($SE)${N}" ;;
+    esac
+    echo ""
+}
+
+check_boot_state() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}         ESTADO DE BOOT VERIFICADO                     ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    BOOT_STATE=$(adb shell "getprop ro.boot.verifiedbootstate 2>/dev/null" | tr -d '\r')
+    FLASH_LOCKED=$(adb shell "getprop ro.boot.flash.locked 2>/dev/null" | tr -d '\r')
+    VBMETA=$(adb shell "getprop ro.boot.vbmeta.device_state 2>/dev/null" | tr -d '\r')
+    WARRANTY=$(adb shell "getprop ro.boot.warranty_bit 2>/dev/null" | tr -d '\r')
+    BL_STATE=$(adb shell "getprop ro.boot.bl_state 2>/dev/null" | tr -d '\r')
+
+    log_output "${B}[*] verifiedbootstate: ${W}${BOOT_STATE:-desconocido}${N}"
+    log_output "${B}[*] flash.locked:       ${W}${FLASH_LOCKED:-desconocido}${N}"
+    log_output "${B}[*] vbmeta.device_state:${W}${VBMETA:-desconocido}${N}"
+    log_output "${B}[*] warranty_bit:       ${W}${WARRANTY:-desconocido}${N}"
+
+    if [ "$BOOT_STATE" = "orange" ] || [ "$BOOT_STATE" = "red" ]; then
+        log_output "${R}[!] BOOTLOADER DESBLOQUEADO — boot state: $BOOT_STATE${N}"
+        ((SUSPICIOUS_COUNT+=3))
+    fi
+    if [ "$FLASH_LOCKED" = "0" ]; then
+        log_output "${R}[!] Flash desbloqueado (ro.boot.flash.locked=0)${N}"
+        ((SUSPICIOUS_COUNT+=2))
+    fi
+    if [ "$VBMETA" = "unlocked" ]; then
+        log_output "${R}[!] vbmeta.device_state=unlocked${N}"
+        ((SUSPICIOUS_COUNT+=2))
+    fi
+    if [ "$WARRANTY" = "1" ]; then
+        log_output "${Y}[!] warranty_bit=1 — bootloader fue desbloqueado anteriormente${N}"
+        ((SUSPICIOUS_COUNT++))
+    fi
+    if [ -n "$BL_STATE" ] && [ "$BL_STATE" != "0" ]; then
+        log_output "${Y}[!] bl_state=$BL_STATE (valor fuera del estándar)${N}"
+        ((SUSPICIOUS_COUNT++))
+    fi
+
+    # Fingerprint vs system build
+    FP_BUILD=$(adb shell "getprop ro.build.fingerprint 2>/dev/null" | tr -d '\r')
+    FP_SYSTEM=$(adb shell "getprop ro.system.build.fingerprint 2>/dev/null" | tr -d '\r')
+    BUILD_ID=$(adb shell "getprop ro.build.id 2>/dev/null" | tr -d '\r')
+    SYS_BUILD_ID=$(adb shell "getprop ro.system.build.id 2>/dev/null" | tr -d '\r')
+    if [ -n "$BUILD_ID" ] && [ -n "$SYS_BUILD_ID" ] && [ "$BUILD_ID" != "$SYS_BUILD_ID" ]; then
+        log_output "${R}[!] Fingerprint adulterado: ro.build.id=$BUILD_ID vs ro.system.build.id=$SYS_BUILD_ID${N}"
+        ((SUSPICIOUS_COUNT+=2))
+    fi
+
+    BUILD_TAGS=$(adb shell "getprop ro.build.tags 2>/dev/null" | tr -d '\r')
+    if echo "$BUILD_TAGS" | grep -qiE "test-keys|dev-keys"; then
+        log_output "${R}[!] Build tags sospechosas: $BUILD_TAGS${N}"
+        ((SUSPICIOUS_COUNT+=2))
+    else
+        log_output "${G}[✓] Build tags normales: ${BUILD_TAGS}${N}"
+    fi
+    echo ""
+}
+
+check_kernel() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}         ANÁLISIS DE KERNEL                            ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    KERNEL=$(adb shell "uname -r 2>/dev/null" | tr -d '\r')
+    log_output "${B}[*] Kernel: ${W}$KERNEL${N}"
+
+    # KernelSU en el kernel
+    KSU_LOG=$(adb shell 'logcat -b kernel -d 2>/dev/null | grep -iE "kernelsu|magisk|apatch" | head -1' | tr -d '\r')
+    if [ -n "$KSU_LOG" ]; then
+        log_output "${R}[!] KernelSU/Magisk/APatch detectado en kernel log:${N}"
+        log_output "${Y}  $KSU_LOG${N}"
+        ((SUSPICIOUS_COUNT+=3))
+    fi
+
+    # Sufijo de page size (indica kernel custom)
+    if echo "$KERNEL" | grep -qE "\-[0-9]+k$|\-[0-9]+K$"; then
+        log_output "${Y}[!] uname con sufijo de page size: $KERNEL — indica kernel personalizado${N}"
+        ((SUSPICIOUS_COUNT++))
+    fi
+
+    # /proc/version
+    PROC_VER=$(adb shell "cat /proc/version 2>/dev/null" | tr -d '\r')
+    if echo "$PROC_VER" | grep -qiE "kernelsu|magisk|apatch|dirty|unofficial"; then
+        log_output "${R}[!] Kernel modificado detectado en /proc/version${N}"
+        log_output "${Y}  $PROC_VER${N}"
+        ((SUSPICIOUS_COUNT+=2))
+    fi
+
+    # SuSFS
+    SUSFS=$(adb shell '{ test -d /proc/sys/fs/susfs && echo FOUND; } || { test -d /sys/kernel/security/susfs && echo FOUND; } || echo NOTFOUND' | tr -d '\r')
+    if echo "$SUSFS" | grep -q "FOUND"; then
+        log_output "${R}[!] SuSFS detectado (oculta montajes/sockets de KernelSU)${N}"
+        ((SUSPICIOUS_COUNT+=3))
+    else
+        log_output "${G}[✓] SuSFS no detectado${N}"
+    fi
+
+    # Módulos de kernel sospechosos via /proc/mounts
+    KSU_MOUNT=$(adb shell "grep -iE '^KSU on /(system|vendor|product)' /proc/mounts 2>/dev/null | head -3" | tr -d '\r')
+    if [ -n "$KSU_MOUNT" ]; then
+        log_output "${R}[!] Módulos KernelSU montados detectados:${N}"
+        echo "$KSU_MOUNT" | while read -r line; do log_output "${Y}  $line${N}"; done
+        ((SUSPICIOUS_COUNT+=2))
+    fi
+    echo ""
+}
+
+check_suspicious_packages() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     APLICACIONES SOSPECHOSAS / ROOT / CHEAT           ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    declare -A SUSPICIOUS_APPS
+    SUSPICIOUS_APPS=(
+        ["com.topjohnwu.magisk"]="Magisk (Manager)"
+        ["io.github.magisk"]="Magisk"
+        ["com.rifsxd.ksunext"]="KernelSU Next"
+        ["me.weishu.kernelsu"]="KernelSU"
+        ["me.bmax.apatch"]="APatch"
+        ["io.github.apatch"]="APatch"
+        ["io.github.huskydg.magisk"]="Magisk Delta"
+        ["org.lsposed.manager"]="LSPosed Manager"
+        ["com.dergoogler.mmrl"]="MMRL (Magisk Module)"
+        ["com.zhenxi.hunter"]="Shizuku Hunter"
+        ["com.googleplay.ndkvs"]="Free Fire Modificado (.ndkvs)"
+        ["eu.sisik.hackendebug"]="Hack&Debug"
+        ["eu.sisik.hackendebug.full"]="Hack&Debug Pro"
+        ["me.piebridge.brevent"]="Brevent"
+        ["io.github.mhmrdd.libxposed"]="libXposed"
+        ["io.github.mhmrdd.libxposed.ps.passit"]="Passador de Replay via Xposed"
+        ["io.liankong.riskdetector"]="Risk Detector"
+        ["com.tsng.applistdetector"]="AppList Detector"
+        ["io.github.rabehx.securify"]="Securify"
+        ["com.eltavine.duckdetector"]="Duck Detector"
+        ["gr.nikolasspyr.integritycheck"]="Integrity Check"
+        ["com.studio.duckdetector"]="Duck Detector (Studio)"
+        ["com.reveny.nativecheck"]="NativeCheck"
+        ["com.chunqiunativecheck"]="NativeCheck"
+        ["com.lexa.fakegps"]="Fake GPS"
+        ["com.incorporateapps.fakegps.fre"]="Fake GPS Free"
+        ["com.zerotier.one"]="ZeroTier (tunel)"
+        ["com.lbe.parallel"]="Parallel Space"
+        ["io.github.vvb2060.mahoshojo"]="TrickyStore (Bypass)"
+        ["io.github.huskydg.memorydetector"]="MemoryDetector"
+        ["com.system.update.service"]="Servicio falso de sistema"
+        ["id.my.pjm.qbcd_okr_dvii"]="QBCD (detector root)"
+        ["com.rem01gaming.disclosure"]="Disclosure"
+    )
+
+    PKG_LIST=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    FOUND_SUSP=0
+    for pkg in "${!SUSPICIOUS_APPS[@]}"; do
+        if echo "$PKG_LIST" | grep -q "package:$pkg"; then
+            log_output "${R}[!] App sospechosa: ${SUSPICIOUS_APPS[$pkg]} ($pkg)${N}"
+            FOUND_SUSP=1; ((SUSPICIOUS_COUNT+=2))
+        fi
+    done
+
+    # Buscar por instalador sospechoso (sideload/ADB)
+    log_output "${B}[+] Verificando instalador de $GAME_PKG...${N}"
+    INSTALLER=$(adb shell "dumpsys package $GAME_PKG 2>/dev/null | grep 'installerPackageName'" | tr -d '\r' | head -1)
+    if [ -n "$INSTALLER" ]; then
+        log_output "${B}[*] $INSTALLER${N}"
+        if echo "$INSTALLER" | grep -qiE "null|adb|sideload|unknown|bin.mt.plus|me.kissfisher"; then
+            log_output "${R}[!] Instalador sospechoso/modificado: $INSTALLER${N}"
+            ((SUSPICIOUS_COUNT+=2)); FOUND_SUSP=1
+        fi
+    fi
+
+    # batterystats — apps en historial que ya no están instaladas
+    log_output "${B}[+] Verificando historial de apps sospechosas (batterystats)...${N}"
+    BATT_HIST=$(adb shell "dumpsys batterystats 2>/dev/null | grep -oE 'pkgunin=[0-9]+:\"[^\"]+\"' | grep -oE '\"[^\"]+\"' | tr -d '\"' | sort -u" | tr -d '\r')
+    if [ -n "$BATT_HIST" ]; then
+        while read -r pkg; do
+            [ -z "$pkg" ] && continue
+            if echo "$pkg" | grep -qiE "magisk|xposed|lsposed|kernelsu|apatch|frida|hook|cheat|hack|bypass|cracked|modded|inject|passit|suspeito"; then
+                log_output "${Y}[!] App sospechosa en historial (desinstalada): $pkg${N}"
+                ((SUSPICIOUS_COUNT++)); FOUND_SUSP=1
+            fi
+        done <<< "$BATT_HIST"
+    fi
+
+    [ $FOUND_SUSP -eq 0 ] && log_output "${G}[✓] Sin apps sospechosas${N}"
+    echo ""
+}
+
+check_network_ports() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     PUERTOS Y CONEXIONES SOSPECHOSAS                  ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    # Puertos Frida (27042/27043 = 0x699A/0x699B en hex little-endian = 69B2/69B3)
+    log_output "${B}[+] Verificando puertos Frida (27042/27043)...${N}"
+    FRIDA_PORT=$(adb shell "for f in /proc/net/tcp /proc/net/tcp6; do [ -r \"\$f\" ] || continue; grep -iE ':(69B2|69B3) ' \"\$f\" | grep -E ' 0A ' && echo \"\$f\"; done | head -3" | tr -d '\r')
+    if [ -n "$(echo "$FRIDA_PORT" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] PUERTOS FRIDA DETECTADOS EN LISTEN:${N}"
+        echo "$FRIDA_PORT" | while read -r line; do [ -n "$line" ] && log_output "${Y}  $line${N}"; done
+        ((SUSPICIOUS_COUNT+=3))
+    else
+        log_output "${G}[✓] Sin puertos Frida${N}"
+    fi
+
+    # Sockets Unix de ZygoteNext / Shizuku
+    log_output "${B}[+] Verificando sockets abstractos sospechosos...${N}"
+    UNIX_SOCKETS=$(adb shell "cat /proc/net/unix 2>/dev/null | grep -oE '@zn_(init|global|zygote|log)_[A-Za-z0-9]+' | sort -u | head -5" | tr -d '\r')
+    if [ -n "$UNIX_SOCKETS" ]; then
+        log_output "${R}[!] Sockets ZygoteNext detectados (APatch Trick):${N}"
+        echo "$UNIX_SOCKETS" | while read -r s; do log_output "${Y}  $s${N}"; done
+        ((SUSPICIOUS_COUNT+=2))
+    fi
+
+    # Puertos locales inesperados (excluyendo los comunes)
+    log_output "${B}[+] Verificando puertos localhost inesperados...${N}"
+    UNEXPECTED_PORTS=$(adb shell "awk '\$4==\"0A\"{print \$2}' /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -E '^0100007F:|^\[::ffff:7f' | while read addr; do port=\$((16#\${addr##*:})); echo \$port; done | sort -nu | grep -vE '^(80|443|53|8080|4444|5554|5555|8888|9229)\$'" | tr -d '\r')
+    if [ -n "$UNEXPECTED_PORTS" ]; then
+        log_output "${Y}[!] Puertos localhost en LISTEN no estándar:${N}"
+        echo "$UNEXPECTED_PORTS" | while read -r p; do [ -n "$p" ] && log_output "${Y}  :$p${N}"; done
+        ((SUSPICIOUS_COUNT++))
+    else
+        log_output "${G}[✓] Sin puertos localhost sospechosos${N}"
+    fi
+
+    # Wi-Fi Proxy
+    log_output "${B}[+] Verificando proxy Wi-Fi...${N}"
+    WIFI_PROXY_HOST=$(adb shell "content query --uri content://settings/global/wifi_proxy_host 2>/dev/null" | tr -d '\r')
+    WIFI_PROXY_PORT=$(adb shell "content query --uri content://settings/global/wifi_proxy_port 2>/dev/null" | tr -d '\r')
+    if echo "$WIFI_PROXY_HOST" | grep -qE "value=.+[^null]"; then
+        log_output "${R}[!] Proxy Wi-Fi configurado: $WIFI_PROXY_HOST $WIFI_PROXY_PORT${N}"
+        ((SUSPICIOUS_COUNT+=2))
+    else
+        log_output "${G}[✓] Sin proxy Wi-Fi${N}"
+    fi
+    echo ""
+}
+
+check_adb_connections() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     CONEXIONES ADB / CONTROL REMOTO                   ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    # USB conectado a computador
+    log_output "${B}[+] Verificando conexión USB...${N}"
+    USB_STATE=$(adb shell "getprop sys.usb.state 2>/dev/null" | tr -d '\r')
+    log_output "${B}[*] USB state: ${W}${USB_STATE:-desconocido}${N}"
+
+    USB_CONNECTED=$(adb shell "dumpsys usb 2>/dev/null | grep -c 'USB_STATE=CONNECTED'" | tr -d '\r')
+    if [ "${USB_CONNECTED:-0}" -gt 0 ] 2>/dev/null; then
+        log_output "${Y}[!] USB_STATE=CONNECTED detectado ($USB_CONNECTED)${N}"
+        ((SUSPICIOUS_COUNT++))
+    fi
+
+    # Claves ADB autorizadas recientes
+    log_output "${B}[+] Verificando autorizaciones ADB recientes...${N}"
+    ADB_KEYS=$(adb shell "dumpsys adb 2>/dev/null | grep -c 'connected key\|public key'" | tr -d '\r')
+    if [ "${ADB_KEYS:-0}" -gt 0 ] 2>/dev/null; then
+        log_output "${Y}[!] $ADB_KEYS clave(s) ADB autorizadas en el sistema${N}"
+    fi
+
+    # AdbDebuggingManager leer fallos (PC desconectado rápido)
+    ADB_READ_FAIL=$(adb shell "logcat -d -b system 2>/dev/null | grep -c 'AdbDebuggingManager.*Read failed'" | tr -d '\r')
+    if [ "${ADB_READ_FAIL:-0}" -gt 2 ] 2>/dev/null; then
+        log_output "${R}[!] AdbDebuggingManager: $ADB_READ_FAIL fallos de lectura — PC desconectado rápidamente${N}"
+        ((SUSPICIOUS_COUNT++))
+    fi
+
+    # Procesos ejecutables corriendo desde /data/adb/
+    log_output "${B}[+] Verificando procesos desde /data/adb/...${N}"
+    DATA_ADB_PROCS=$(adb shell 'for f in /proc/[0-9]*/exe; do l=$(readlink "$f" 2>/dev/null); case "$l" in /data/adb/*ksud*|/data/adb/*magiskd*|/data/adb/*apd*) continue;; /data/adb/*) echo "${f%%/exe}: $l";; esac; done 2>/dev/null | head -5' | tr -d '\r')
+    if [ -n "$(echo "$DATA_ADB_PROCS" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] Procesos corriendo desde /data/adb/:${N}"
+        echo "$DATA_ADB_PROCS" | while read -r line; do [ -n "$line" ] && log_output "${Y}  $line${N}"; done
+        ((SUSPICIOUS_COUNT+=2))
+    else
+        log_output "${G}[✓] Sin procesos ejecutables inesperados en /data/adb/${N}"
+    fi
+
+    # Apps de control remoto / espejamiento instaladas
+    log_output "${B}[+] Verificando apps de control remoto...${N}"
+    declare -A REMOTE_APPS
+    REMOTE_APPS=(
+        ["com.koushikdutta.vysor"]="Vysor"
+        ["com.genymobile.scrcpy"]="scrcpy"
+        ["com.github.xianfeng92.scrcpy"]="QtScrcpy"
+        ["com.adbcontrol.free"]="ADB Control"
+    )
+    PKG_LIST2=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    FOUND_REMOTE=0
+    for pkg in "${!REMOTE_APPS[@]}"; do
+        if echo "$PKG_LIST2" | grep -q "package:$pkg"; then
+            log_output "${Y}[!] App de control remoto: ${REMOTE_APPS[$pkg]} ($pkg)${N}"
+            FOUND_REMOTE=1; ((SUSPICIOUS_COUNT++))
+        fi
+    done
+    [ $FOUND_REMOTE -eq 0 ] && log_output "${G}[✓] Sin apps de control remoto${N}"
+    echo ""
+}
+
+check_uninstalled_apps() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     APPS SOSPECHOSAS DESINSTALADAS                    ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    log_output "${B}[+] Buscando apps desinstaladas sospechosas en batterystats...${N}"
+    # pkgunin = packages que fueron desinstaladas pero aparecen en el historial
+    UNINSTALLED=$(adb shell "dumpsys batterystats 2>/dev/null | grep -oE 'pkgunin=[0-9]+:\"[^\"]+\"' | grep -oE '\"[^\"]+\"' | tr -d '\"' | sort -u" | tr -d '\r')
+    FOUND_UNINST=0
+    if [ -n "$UNINSTALLED" ]; then
+        while read -r pkg; do
+            [ -z "$pkg" ] && continue
+            if echo "$pkg" | grep -qiE "magisk|xposed|lsposed|kernelsu|apatch|frida|hook|cheat|hack|bypass|cracked|modded|inject|passit|panel|gg\.mod"; then
+                log_output "${Y}[!] App sospechosa desinstalada en historial: $pkg${N}"
+                FOUND_UNINST=1; ((SUSPICIOUS_COUNT++))
+            fi
+        done <<< "$UNINSTALLED"
+    fi
+
+    # Force-stop sospechoso en logcat (deletePackageX/pkg removed de apps de cheat)
+    log_output "${B}[+] Verificando force-stop de apps sospechosas en logs...${N}"
+    FORCE_STOP=$(adb shell "logcat -d -b system 2>/dev/null | grep -E 'Force stopping|deletePackageX|pkg removed' | grep -iE 'magisk|xposed|frida|cheat|hack|bypass|kernelsu|apatch' | tail -5" | tr -d '\r')
+    if [ -n "$FORCE_STOP" ]; then
+        log_output "${Y}[!] Force-stop de apps sospechosas detectado:${N}"
+        echo "$FORCE_STOP" | while read -r line; do log_output "${Y}  $line${N}"; done
+        ((SUSPICIOUS_COUNT++))
+    fi
+
+    [ $FOUND_UNINST -eq 0 ] && [ -z "$FORCE_STOP" ] && log_output "${G}[✓] Sin apps sospechosas en historial${N}"
+    echo ""
+}
+
+check_media_projection() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     CAPTURA DE PANTALLA / MEDIA PROJECTION             ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    log_output "${B}[+] Verificando media_projection activa...${N}"
+    MEDIA_PROJ=$(adb shell "dumpsys media_projection 2>/dev/null | grep -iE 'package|isRecording|state.*record|projection.*active' | head -10" | tr -d '\r')
+    if echo "$MEDIA_PROJ" | grep -qiE "isRecording=true|state=STARTED|active=true"; then
+        log_output "${R}[!] CAPTURA DE PANTALLA ACTIVA — posible espejamiento:${N}"
+        echo "$MEDIA_PROJ" | while read -r line; do [ -n "$line" ] && log_output "${Y}  $line${N}"; done
+        ((SUSPICIOUS_COUNT+=2))
+    else
+        log_output "${G}[✓] Sin captura de pantalla activa${N}"
+    fi
+
+    # appops SYSTEM_ALERT_WINDOW
+    log_output "${B}[+] Verificando permiso SYSTEM_ALERT_WINDOW...${N}"
+    SAW=$(adb shell "adb shell appops get $GAME_PKG SYSTEM_ALERT_WINDOW 2>/dev/null" | tr -d '\r')
+    if echo "$SAW" | grep -qi "allow"; then
+        log_output "${Y}[!] $GAME_SELECTED tiene SYSTEM_ALERT_WINDOW permitido${N}"
+        ((SUSPICIOUS_COUNT++))
+    else
+        log_output "${G}[✓] SYSTEM_ALERT_WINDOW no activo${N}"
+    fi
+    echo ""
+}
+
+check_data_local_tmp() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     ARCHIVOS EN /DATA/LOCAL/TMP                       ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    log_output "${B}[+] Verificando /data/local/tmp...${N}"
+    TMP_FILES=$(adb shell 'for f in /data/local/tmp/* /data/local/tmp/.*; do n="${f##*/}"; case "$n" in "." | "..") ;; *) [ -e "$f" ] && echo "$n";; esac; done' | tr -d '\r')
+    if [ -n "$(echo "$TMP_FILES" | tr -d '[:space:]')" ]; then
+        log_output "${Y}[!] Archivos encontrados en /data/local/tmp:${N}"
+        echo "$TMP_FILES" | while read -r f; do
+            [ -n "$f" ] && log_output "${Y}  $f${N}"
+            if echo "$f" | grep -qiE "frida|hook|inject|cheat|hack|bypass|script"; then
+                log_output "${R}    ^ SOSPECHOSO${N}"
+                ((SUSPICIOUS_COUNT++))
+            fi
+        done
+        ((SUSPICIOUS_COUNT++))
+    else
+        log_output "${G}[✓] /data/local/tmp vacío${N}"
+    fi
+    echo ""
+}
+
+check_dropbox_crashes() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     CRASHES SOSPECHOSOS (DROPBOX)                     ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    log_output "${B}[+] Verificando crashes repetidos en dropbox...${N}"
+    CRASHES=$(adb shell 'dumpsys dropbox 2>/dev/null | grep -E "native_crash|TOMBSTONE|system_server" | sed "s/.*[0-9][0-9]:[0-9][0-9]:[0-9][0-9] //" | sed "s/ ([0-9]* bytes)//" | sort | uniq -c | sort -rn | awk '"'"'$1>=3{print $1" x "$2}'"'"' | head -5' | tr -d '\r')
+    if [ -n "$(echo "$CRASHES" | tr -d '[:space:]')" ]; then
+        log_output "${Y}[!] Crashes repetidos detectados:${N}"
+        echo "$CRASHES" | while read -r line; do [ -n "$line" ] && log_output "${Y}  $line${N}"; done
+        ((SUSPICIOUS_COUNT++))
+    else
+        log_output "${G}[✓] Sin crashes repetidos${N}"
+    fi
+
+    # AudioService crash (anti-cheat kill via audio crash)
+    AUDIO_CRASH=$(adb shell "dumpsys dropbox 2>/dev/null | grep -iE 'audio.*crash|data_app_crash' | grep -i audio | head -3" | tr -d '\r')
+    if [ -n "$AUDIO_CRASH" ]; then
+        log_output "${Y}[!] Crash de AudioService — puede indicar kill de anti-cheat${N}"
+        ((SUSPICIOUS_COUNT++))
+    fi
+
+    # PhantomProcess kills (Android 12+)
+    PHANTOM=$(adb shell "logcat -d -b system 2>/dev/null | grep 'PhantomProcessRecord' | tail -5" | tr -d '\r')
+    if [ -n "$PHANTOM" ]; then
+        log_output "${Y}[!] PhantomProcessRecord en logs (procesos matados por el sistema):${N}"
+        echo "$PHANTOM" | while read -r line; do log_output "${Y}  $line${N}"; done
+    fi
+    echo ""
+}
+
+check_auto_time() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     CONFIGURACIÓN DE FECHA/HORA                       ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    log_output "${B}[+] Verificando auto_time y auto_time_zone...${N}"
+    AUTO_TIME=$(adb shell "settings get global auto_time 2>/dev/null" | tr -d '\r')
+    AUTO_TZ=$(adb shell "settings get global auto_time_zone 2>/dev/null" | tr -d '\r')
+    TIMEZONE=$(adb shell "getprop persist.sys.timezone 2>/dev/null" | tr -d '\r')
+
+    log_output "${B}[*] auto_time: ${W}${AUTO_TIME:-desconocido}${N}"
+    log_output "${B}[*] auto_time_zone: ${W}${AUTO_TZ:-desconocido}${N}"
+    log_output "${B}[*] Zona horaria: ${W}${TIMEZONE:-desconocida}${N}"
+
+    if [ "$AUTO_TIME" = "0" ]; then
+        log_output "${R}[!] Hora automática DESACTIVADA — facilita manipulación de timestamps${N}"
+        ((SUSPICIOUS_COUNT+=2))
+    else
+        log_output "${G}[✓] Hora automática activa${N}"
+    fi
+
+    # Pantalla de configuración de fecha abierta via ADB (logcat)
+    DATE_SCREEN=$(adb shell "logcat -d -b all -v time 2>/dev/null | grep -i 'com.android.settings' | grep -i 'date\|time\|clock' | tail -3" | tr -d '\r')
+    if [ -n "$DATE_SCREEN" ]; then
+        log_output "${Y}[!] Configuración de fecha/hora abierta recientemente (posible manipulación):${N}"
+        echo "$DATE_SCREEN" | while read -r line; do log_output "${Y}  $line${N}"; done
+        ((SUSPICIOUS_COUNT++))
+    fi
+    echo ""
+}
+
 show_summary() {
     log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
     log_output "${C}║${W}              RESUMEN DEL ANÁLISIS                     ${C}║${N}"
@@ -745,4 +1306,5 @@ show_summary() {
 # ─────────────────────────────────────────────────────────────
 check_storage
 main_menu
+
 
