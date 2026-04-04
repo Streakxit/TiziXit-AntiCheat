@@ -40,7 +40,6 @@ banner() {
     printf "%b\n" "${C}${top}${N}"
     printf "%b\n" "${C}║${M}$( _center "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM" )${C}║${N}"
     printf "%b\n" "${C}║${M}$( _center "VERSIÓN 1.2.0" )${C}║${N}"
-    printf "%b\n" "${C}║${M}$( _center "discord gg/lskcheats" )${C}║${N}"
     printf "%b\n" "${C}${bottom}${N}"
     echo ""
     printf "%b\n" "${Y}${top}${N}"
@@ -75,7 +74,8 @@ main_menu() {
     echo -e "${G}[1]${W} Escanear Free Fire Normal${N}"
     echo -e "${G}[2]${W} Escanear Free Fire MAX${N}"
     echo -e "${C}[3]${W} Ver último log guardado${N}"
-    echo -e "${M}[4]${W} Actualizar scanner${N}"
+    echo -e "${B}[4]${W} Guardar diagnóstico completo (Dumpsys)${N}"
+    echo -e "${M}[5]${W} Actualizar scanner${N}"
     echo -e "${R}[S]${W} Salir${N}"
     echo ""
     echo -ne "${Y}Selecciona una opción: ${N}"
@@ -86,7 +86,8 @@ main_menu() {
         1) scan_ff_normal ;;
         2) scan_ff_max ;;
         3) ver_ultimo_log ;;
-        4) actualizar_scanner ;;
+        4) guardar_dumpsys ;;
+        5) actualizar_scanner ;;
         s|S) echo -e "\n${W}Gracias por usar el scanner${N}\n"; exit 0 ;;
         *) echo -e "${R}Opción inválida${N}"; sleep 2; main_menu ;;
     esac
@@ -104,10 +105,106 @@ actualizar_scanner() {
     exec bash scanner.sh
 }
 
-conectar_adb() {
+guardar_dumpsys() {
     clear; banner
     echo -e "${B}╔════════════════════════════════════════════════════════╗${N}"
-    echo -e "${B}║           INSTRUCCIONES PARA CONECTAR ADB              ║${N}"
+    echo -e "${B}║         GUARDAR DIAGNÓSTICO COMPLETO                  ║${N}"
+    echo -e "${B}╚════════════════════════════════════════════════════════╝${N}"
+
+    if ! adb devices | grep -q "device$"; then
+        echo -e "${R}[!] No hay dispositivos conectados. Usá la opción [0]${N}"
+        echo -e "${W}Enter...${N}"; read; main_menu; return
+    fi
+
+    DUMP_DIR="$HOME/dump_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$DUMP_DIR"
+    echo -e "${B}[*] Guardando en: ${W}$DUMP_DIR${N}\n"
+
+    _dump_step() {
+        echo -ne "${B}  → $1...${N}"
+        eval "$2" > "$DUMP_DIR/$3" 2>&1
+        echo -e " ${G}OK${N}"
+    }
+
+    # Propiedades del sistema
+    _dump_step "Propiedades del sistema" \
+        "adb shell 'getprop 2>/dev/null'" \
+        "getprop.txt"
+
+    # Kernel y hardware
+    _dump_step "Info del kernel" \
+        "adb shell 'uname -a 2>/dev/null; echo; cat /proc/version 2>/dev/null; echo; cat /proc/cmdline 2>/dev/null | tr \"\\0\" \" \"; echo'" \
+        "kernel_info.txt"
+
+    # Logcat — todos los buffers
+    for buf in main system events kernel crash; do
+        _dump_step "Logcat [$buf]" \
+            "adb shell 'logcat -d -b $buf 2>/dev/null'" \
+            "logcat_${buf}.txt"
+    done
+
+    # Logcat completo con threadtime (últimas 8000 líneas)
+    _dump_step "Logcat completo (tail 8000)" \
+        "adb shell 'logcat -d -v threadtime -b all 2>/dev/null | tail -n 8000'" \
+        "logcat_all_tail.txt"
+
+    # dumpsys — servicios clave
+    for svc in package activity procstats batterystats appops usb media_projection; do
+        _dump_step "dumpsys $svc" \
+            "adb shell 'dumpsys $svc 2>/dev/null'" \
+            "dumpsys_${svc}.txt"
+    done
+
+    # dumpsys overlay (wallhack overlay check)
+    _dump_step "dumpsys overlay" \
+        "adb shell 'dumpsys overlay 2>/dev/null'" \
+        "dumpsys_overlay.txt"
+
+    # dumpsys usagestats (historial de apps)
+    _dump_step "dumpsys usagestats (tail 8000)" \
+        "adb shell 'dumpsys usagestats 2>/dev/null | tail -n 8000'" \
+        "dumpsys_usagestats_tail.txt"
+
+    # ps + mounts + tcp
+    _dump_step "Procesos activos" \
+        "adb shell 'ps -A -Z 2>/dev/null'" \
+        "ps_full.txt"
+    _dump_step "Puntos de montaje" \
+        "adb shell 'cat /proc/mounts 2>/dev/null'" \
+        "mounts.txt"
+    _dump_step "Conexiones TCP" \
+        "adb shell 'cat /proc/net/tcp /proc/net/tcp6 2>/dev/null'" \
+        "tcp_connections.txt"
+    _dump_step "Sockets Unix" \
+        "adb shell 'cat /proc/net/unix 2>/dev/null'" \
+        "unix_sockets.txt"
+    _dump_step "appops completo" \
+        "adb shell 'dumpsys appops 2>/dev/null'" \
+        "dumpsys_appops.txt"
+
+    # Dropbox
+    _dump_step "Dropbox (crashes)" \
+        "adb shell 'dumpsys dropbox 2>/dev/null'" \
+        "dumpsys_dropbox.txt"
+
+    # Packages Free Fire (ambos)
+    for pkg in com.dts.freefireth com.dts.freefiremax; do
+        _dump_step "Package info $pkg" \
+            "adb shell 'dumpsys package $pkg 2>/dev/null'" \
+            "dumpsys_pkg_${pkg}.txt"
+    done
+
+    echo ""
+    DUMP_SIZE=$(du -sh "$DUMP_DIR" 2>/dev/null | cut -f1)
+    echo -e "${G}[✓] Diagnóstico guardado: ${W}$DUMP_DIR${G} ($DUMP_SIZE)${N}"
+    echo -e "${Y}[*] Podés comprimir con: tar czf dump.tar.gz -C \$HOME $(basename $DUMP_DIR)${N}"
+    echo ""
+    echo -e "${W}Enter para volver...${N}"; read; main_menu
+}
+
+
+conectar_adb() {
+    clear; banner
     echo -e "${B}╚════════════════════════════════════════════════════════╝${N}"
     echo -e "${W}1. Ajustes > Opciones de Desarrollador${N}"
     echo -e "${W}2. Activar 'Depuración inalámbrica'${N}"
@@ -275,9 +372,10 @@ check_hwid_ban() {
         log_output "${G}[✓] ulcnt=0 o no disponible${N}"
     fi
 
-    # ── Mensajes de ban en logcat ─────────────────────────────
+    # Mensajes de ban en logcat — regex ajustado para evitar falsos positivos
+    # como "WIFI_BAND_5_GHZ" que contiene "ban" como substring
     log_output "${B}[+] Buscando mensajes de ban en logcat...${N}"
-    BAN_LOG=$(adb shell "logcat -d 2>/dev/null | grep -iE 'hwid.*ban|ban.*hwid|device.*ban|banned.*device|account.*ban' | grep -viE 'knox|samsung|ok' | tail -5" | tr -d '\r')
+    BAN_LOG=$(adb shell "logcat -d 2>/dev/null | grep -iE 'hwid.*ban[^d]|ban[^d].*hwid|account.*banned|device.*banned|banned.*account' | grep -viE 'knox|samsung|wifi_band|NearbyMediums|Bluetooth' | tail -5" | tr -d '\r')
     if [ -n "$(echo "$BAN_LOG" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] Mensajes de ban detectados en logcat:${N}"
         echo "$BAN_LOG" | while read -r line; do [ -n "$line" ] && log_output "${Y}  $line${N}"; done
@@ -785,8 +883,10 @@ check_tooling() {
     log_output "${B}[+] Verificando emuladores y herramientas sospechosas...${N}"
     TOOL_FOUND=0
 
-    # Detectar emuladores reales — excluir knox y samsung que son legítimos
-    EMULATOR_PROPS=$(adb shell "getprop 2>/dev/null | grep -iE 'qemu|goldfish|vbox|genymotion|nox|memu|bluestacks|andy|droid4x'" | grep -viE 'knox|samsung' | tr -d '\r')
+    # Detectar emuladores reales — solo flagear propiedades con valor sospechoso,
+    # excluir ro.kernel.qemu con valor 0 (presente en todos los Android reales)
+    EMULATOR_PROPS=$(adb shell "getprop 2>/dev/null | grep -iE 'qemu|goldfish|vbox|genymotion|nox|memu|bluestacks|andy|droid4x'" \
+        | grep -viE 'knox|samsung|\]: \[0\]|\]: \[\]' | tr -d '\r')
     if [ -n "$EMULATOR_PROPS" ]; then
         log_output "${R}[!] EMULADOR DETECTADO${N}"
         echo "$EMULATOR_PROPS" | while read -r line; do log_output "${Y}  $line${N}"; done
@@ -934,7 +1034,7 @@ check_kernel() {
     fi
 
     # Módulos de kernel sospechosos via /proc/mounts
-    KSU_MOUNT=$(adb shell "grep -iE '^KSU on /(system|vendor|product)' /proc/mounts 2>/dev/null | head -3" | tr -d '\r')
+    KSU_MOUNT=$(adb shell 'grep -iE "KSU on /(system|vendor|product)" /proc/mounts 2>/dev/null | head -3' | tr -d '\r')
     if [ -n "$KSU_MOUNT" ]; then
         log_output "${R}[!] Módulos KernelSU montados detectados:${N}"
         echo "$KSU_MOUNT" | while read -r line; do log_output "${Y}  $line${N}"; done
