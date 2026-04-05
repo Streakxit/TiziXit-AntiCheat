@@ -15,81 +15,70 @@ C='\033[1;36m'
 W='\033[1;37m'
 N='\033[0m'
 
-
 BACKEND_URL="https://unknown-scanner-backend-v1-0.onrender.com"
 
 LOGFILE="$HOME/anticheat_log_$(date +%Y%m%d_%H%M%S).txt"
 SUSPICIOUS_COUNT=0
 GAME_SELECTED=""
 GAME_PKG=""
+DEVICE_HWID=""
 
-# ─────────────────────────────────────────────────────────────
-#  HWID — calculado localmente, nunca se transmite info sensible
-#  Combina android_id + serial + CPU ABI y saca MD5.
-#  Igual al lado del servidor: solo se guarda el hash, no el HW real.
-# ─────────────────────────────────────────────────────────────
-calcular_hwid() {
-    local android_id serial abi
+
+obter_hwid_real() {
+    local android_id serial boot_serial
     android_id=$(adb shell "settings get secure android_id 2>/dev/null" | tr -d '\r\n')
     serial=$(adb shell "getprop ro.serialno 2>/dev/null" | tr -d '\r\n')
-    abi=$(adb shell "getprop ro.product.cpu.abi 2>/dev/null" | tr -d '\r\n')
-    printf '%s:%s:%s' "$android_id" "$serial" "$abi" | md5sum | cut -d' ' -f1
+    boot_serial=$(adb shell "getprop ro.boot.serialno 2>/dev/null" | tr -d '\r\n')
+    printf '%s:%s:%s' "$android_id" "$serial" "$boot_serial" \
+        | md5sum | cut -d' ' -f1
 }
 
-# ─────────────────────────────────────────────────────────────
-#  VERIFICACIÓN DE BAN — consulta el backend antes de escanear
-# ─────────────────────────────────────────────────────────────
-verificar_ban() {
-    clear
-    echo -e "${B}[*] Verificando acceso...${N}"
 
-    # Necesita ADB conectado para calcular HWID
-    if ! adb devices | grep -q "device$"; then
-        echo -e "${R}[!] No hay dispositivos conectados. Usá la opción [0]${N}"
-        sleep 2; return 1
-    fi
+verificar_hwid_ban() {
+    echo -e "${B}[*] Verificando dispositivo...${N}"
 
-    local hwid
-    hwid=$(calcular_hwid)
+    DEVICE_HWID=$(obter_hwid_real)
 
-    if [ -z "$hwid" ] || [ ${#hwid} -lt 8 ]; then
-        echo -e "${Y}[*] No se pudo calcular HWID — continuando sin verificación${N}"
+    if [ -z "$DEVICE_HWID" ] || [ ${#DEVICE_HWID} -lt 8 ]; then
+        echo -e "${Y}[*] No se pudo calcular HWID — continuando${N}"
         sleep 1; return 0
     fi
 
-    # Consultar el backend
-    local response http_code
-    response=$(curl -sf --max-time 8 \
-        "${BACKEND_URL}/api/ban/check?hwid=${hwid}" 2>/dev/null)
-    http_code=$?
+    local respuesta
+    respuesta=$(curl -sf --max-time 6 \
+        "${BACKEND_URL}/api/ban/check?hwid=${DEVICE_HWID}" 2>/dev/null)
 
-    # Si el backend no responde, dejar pasar (no bloquear por fallo de red)
-    if [ $http_code -ne 0 ] || [ -z "$response" ]; then
-        echo -e "${Y}[*] Backend no disponible — continuando offline${N}"
-        sleep 1; return 0
+    # Sin conexión → dejar pasar
+    if [ -z "$respuesta" ]; then
+        return 0
     fi
 
-    local banned motivo fecha
-    banned=$(echo "$response" | grep -o '"banned":[^,}]*' | cut -d: -f2 | tr -d '" ')
-    motivo=$(echo "$response" | grep -o '"motivo":"[^"]*"' | cut -d'"' -f4)
-    fecha=$(echo "$response" | grep -o '"fecha":"[^"]*"' | cut -d'"' -f4)
+    local baneado motivo fecha
+    baneado=$(echo "$respuesta" | grep -o '"ban":[^,}]*' | cut -d: -f2 | tr -d '" ')
+    motivo=$(echo "$respuesta"  | grep -o '"motivo":"[^"]*"' | cut -d'"' -f4)
+    fecha=$(echo "$respuesta"   | grep -o '"fecha":"[^"]*"'  | cut -d'"' -f4)
 
-    if [ "$banned" = "true" ]; then
+    if [ "$baneado" = "true" ]; then
         clear
+        echo ""
+        echo -e "${R}  ██████╗  █████╗ ███╗   ██╗${N}"
+        echo -e "${R}  ██╔══██╗██╔══██╗████╗  ██║${N}"
+        echo -e "${R}  ██████╔╝███████║██╔██╗ ██║${N}"
+        echo -e "${R}  ██╔══██╗██╔══██║██║╚██╗██║${N}"
+        echo -e "${R}  ██████╔╝██║  ██║██║ ╚████║${N}"
+        echo -e "${R}  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝${N}"
+        echo ""
         echo -e "${R}╔════════════════════════════════════════════════════════╗${N}"
-        echo -e "${R}║                                                        ║${N}"
-        echo -e "${R}║        ✗  ACCESO DENEGADO AL SCANNER  ✗               ║${N}"
-        echo -e "${R}║                                                        ║${N}"
+        echo -e "${R}║         DISPOSITIVO BLOQUEADO DEL SCANNER               ║${N}"
         echo -e "${R}╚════════════════════════════════════════════════════════╝${N}"
         echo ""
         echo -e "${W}  Motivo : ${R}${motivo}${N}"
-        echo -e "${W}  Fecha  : ${Y}${fecha}${N}"
-        echo -e "${W}  HWID   : ${Y}${hwid}${N}"
+        echo -e "${W}  Data   : ${Y}${fecha}${N}"
+        echo -e "${W}  HWID   : ${Y}${DEVICE_HWID}${N}"
         echo ""
-        echo -e "${Y}  Este dispositivo fue bloqueado del scanner.${N}"
-        echo -e "${Y}  Contactá al administrador si creés que es un error.${N}"
+        echo -e "${Y}  Este dispositivo no puede usar el scanner.${N}"
         echo ""
-        echo -e "${W}Enter para volver al menú...${N}"; read
+        echo -e "${W}Presione Enter para salir...${N}"; read
         return 1
     fi
 
@@ -224,8 +213,8 @@ conectar_adb() {
     echo -e "${W}Enter para volver...${N}"; read; main_menu
 }
 
-scan_ff_normal() { GAME_PKG="com.dts.freefireth";  GAME_SELECTED="Free Fire";    verificar_ban && ejecutar_scan; }
-scan_ff_max()    { GAME_PKG="com.dts.freefiremax"; GAME_SELECTED="Free Fire MAX"; verificar_ban && ejecutar_scan; }
+scan_ff_normal() { GAME_PKG="com.dts.freefireth";  GAME_SELECTED="Free Fire";    verificar_hwid_ban && ejecutar_scan; }
+scan_ff_max()    { GAME_PKG="com.dts.freefiremax"; GAME_SELECTED="Free Fire MAX"; verificar_hwid_ban && ejecutar_scan; }
 
 ver_ultimo_log() {
     clear; banner
