@@ -15,8 +15,8 @@ C='\033[1;36m'
 W='\033[1;37m'
 N='\033[0m'
 
-# ── URL del backend (cambiar por la de Render) ──────────────
-BACKEND_URL="https://tu-app.onrender.com"
+
+BACKEND_URL="https://unknown-scanner-backend-v1-0.onrender.com"
 
 LOGFILE="$HOME/anticheat_log_$(date +%Y%m%d_%H%M%S).txt"
 SUSPICIOUS_COUNT=0
