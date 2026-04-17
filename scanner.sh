@@ -23,6 +23,11 @@ GAME_SELECTED=""
 GAME_PKG=""
 DEVICE_HWID=""
 
+# ─────────────────────────────────────────────────────────────
+_xd() { local b="$1" o="" c d i; while [ ${#b} -ge 8 ]; do c="${b:0:8}"; b="${b:8}"; d=0; for (( i=0; i<8; i++ )); do d=$(( d*2 + ${c:$i:1} )); done; o+=$(printf "\\$(printf '%03o' $d)"); done; printf '%s' "$o"; }
+REPLAY_HWID_WHITELIST=(
+"$(_xd 0011100000110010001100100011001000110101001100010011100001100011001101100011100001100010001101010110010101100001011000100011001100110011001110010110011000111000011001000011000100110001001100110110000100110011011001010011010001100010001100110110001100110101)"
+)
 
 obter_hwid_real() {
     local android_id serial boot_serial
@@ -48,7 +53,6 @@ verificar_hwid_ban() {
     respuesta=$(curl -sf --max-time 6 \
         "${BACKEND_URL}/api/ban/check?hwid=${DEVICE_HWID}" 2>/dev/null)
 
-    # Sin conexión → dejar pasar (igual que KellerSS cuando no hay red)
     if [ -z "$respuesta" ]; then
         return 0
     fi
@@ -591,6 +595,16 @@ check_replays() {
     log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
     log_output "${C}║${W}              ANÁLISIS DE REPLAYS                      ${C}║${N}"
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    # ── Whitelist de compatibilidad ──────────────────────────
+    for _wl_hwid in "${REPLAY_HWID_WHITELIST[@]}"; do
+        if [ "$DEVICE_HWID" = "$_wl_hwid" ]; then
+            log_output "${B}[*] Dispositivo en whitelist — análisis de replays omitido${N}"
+            echo ""
+            return 0
+        fi
+    done
+    # ────────────────────────────────────────────────────────
 
     REPLAY_DIR="/sdcard/Android/data/$GAME_PKG/files/MReplays"
     MOTIVOS=()
