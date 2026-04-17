@@ -28,6 +28,8 @@ _xd() { local b="$1" o="" c d i; while [ ${#b} -ge 8 ]; do c="${b:0:8}"; b="${b:
 REPLAY_HWID_WHITELIST=(
 "$(_xd 0011100000110010001100100011001000110101001100010011100001100011001101100011100001100010001101010110010101100001011000100011001100110011001110010110011000111000011001000011000100110001001100110110000100110011011001010011010001100010001100110110001100110101)"
 )
+# ─────────────────────────────────────────────────────────────
+
 
 obter_hwid_real() {
     local android_id serial boot_serial
@@ -37,7 +39,6 @@ obter_hwid_real() {
     printf '%s:%s:%s' "$android_id" "$serial" "$boot_serial" \
         | md5sum | cut -d' ' -f1
 }
-
 
 verificar_hwid_ban() {
     echo -e "${B}[*] Verificando dispositivo...${N}"
@@ -53,6 +54,7 @@ verificar_hwid_ban() {
     respuesta=$(curl -sf --max-time 6 \
         "${BACKEND_URL}/api/ban/check?hwid=${DEVICE_HWID}" 2>/dev/null)
 
+    # Sin conexión → dejar pasar (igual que KellerSS cuando no hay red)
     if [ -z "$respuesta" ]; then
         return 0
     fi
@@ -597,6 +599,7 @@ check_replays() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
 
     # ── Whitelist de compatibilidad ──────────────────────────
+    log_output "${B}[*] HWID dispositivo: ${Y}${DEVICE_HWID:-[vacío]}${N}"
     for _wl_hwid in "${REPLAY_HWID_WHITELIST[@]}"; do
         if [ "$DEVICE_HWID" = "$_wl_hwid" ]; then
             log_output "${B}[*] Dispositivo en whitelist — análisis de replays omitido${N}"
@@ -699,7 +702,7 @@ check_replays() {
 
     echo ""
     if [ ${#MOTIVOS[@]} -gt 0 ]; then
-        log_output "${R}[!] REPLAY PASADO DETECTADO - ¡APLICA EL W.O!${N}"
+        log_output "${Y}[!] ⚠ ANOMALÍAS EN REPLAYS — REVISAR MANUALMENTE — POSIBLE FALSO POSITIVO${N}"
         for m in "${MOTIVOS[@]}"; do log_output "${Y}    - $m${N}"; done
         ((SUSPICIOUS_COUNT+=3))
     else
@@ -1413,4 +1416,5 @@ show_summary() {
 # ─────────────────────────────────────────────────────────────
 check_storage
 main_menu
+
 
