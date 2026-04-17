@@ -48,7 +48,7 @@ verificar_hwid_ban() {
     respuesta=$(curl -sf --max-time 6 \
         "${BACKEND_URL}/api/ban/check?hwid=${DEVICE_HWID}" 2>/dev/null)
 
-    
+    # Sin conexión → dejar pasar (igual que KellerSS cuando no hay red)
     if [ -z "$respuesta" ]; then
         return 0
     fi
@@ -311,6 +311,12 @@ ejecutar_scan() {
     check_selinux
     check_boot_state
     check_kernel
+    check_pif
+    check_device_spoof
+    check_ca_certs
+    check_mantis_keymap
+    check_recording
+    check_scenes
     check_suspicious_packages
     check_network_ports
     check_adb_connections
@@ -813,8 +819,9 @@ check_tooling() {
     log_output "${B}[+] Verificando emuladores y herramientas sospechosas...${N}"
     TOOL_FOUND=0
 
-    # Detectar emuladores reales — excluir knox y samsung que son legítimos
-    EMULATOR_PROPS=$(adb shell "getprop 2>/dev/null | grep -iE 'qemu|goldfish|vbox|genymotion|nox|memu|bluestacks|andy|droid4x'" | grep -viE 'knox|samsung' | tr -d '\r')
+    # Detectar emuladores reales — filtrar props con valor [0] o [] que son normales en Android físico
+    EMULATOR_PROPS=$(adb shell "getprop 2>/dev/null | grep -iE 'qemu|goldfish|vbox|genymotion|nox|memu|bluestacks|andy|droid4x'" \
+        | grep -viE 'knox|samsung|\]: \[0\]|\]: \[\]' | tr -d '\r')
     if [ -n "$EMULATOR_PROPS" ]; then
         log_output "${R}[!] EMULADOR DETECTADO${N}"
         echo "$EMULATOR_PROPS" | while read -r line; do log_output "${Y}  $line${N}"; done
@@ -909,7 +916,17 @@ check_kernel() {
     else
         log_output "${G}[✓] SuSFS no detectado${N}"
     fi
-    KSU_MOUNT=$(adb shell 'grep -iE "KSU on /(system|vendor|product)" /proc/mounts 2>/dev/null | head -3' | tr -d '\r')
+    # Kernels custom conocidos por soportar root nativamente
+    CUSTOM_KERNELS=$(echo "$KERNEL" | grep -iE "alucard|chronos|sultan|lychee|eureka|ethereal|elitekernel|wild|buddy|panda|redmi-oc")
+    if [ -n "$CUSTOM_KERNELS" ]; then
+        log_output "${R}[!] Kernel custom con soporte root: $CUSTOM_KERNELS${N}"; ((SUSPICIOUS_COUNT+=2))
+    fi
+
+    # KernelSU Next en props
+    KSUNEXT_PROP=$(adb shell "getprop 2>/dev/null | grep -im1 'ksunext\|com\.rifsxd'" | tr -d '\r')
+    if [ -n "$KSUNEXT_PROP" ]; then
+        log_output "${R}[!] KernelSU Next detectado en props: $KSUNEXT_PROP${N}"; ((SUSPICIOUS_COUNT+=3))
+    fi
     if [ -n "$KSU_MOUNT" ]; then
         log_output "${R}[!] Módulos KernelSU montados:${N}"
         echo "$KSU_MOUNT" | while read -r line; do log_output "${Y}  $line${N}"; done
@@ -1108,6 +1125,249 @@ check_auto_time() {
     echo ""
 }
 
+check_pif() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     PLAY INTEGRITY FIX / SPOOF DE INTEGRIDAD          ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_PIF=0
+
+    # Paquetes PIF conocidos
+    PKG_LIST_PIF=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    for pkg in "es.chiteroman.playintegrityfix" "com.chiteroman.playintegrityfix" "io.github.vvb2060.playintegrityfix"; do
+        if echo "$PKG_LIST_PIF" | grep -q "$pkg"; then
+            log_output "${R}[!] Play Integrity Fix instalado: $pkg${N}"; ((SUSPICIOUS_COUNT+=3)); FOUND_PIF=1
+        fi
+    done
+
+    # Módulo PIF en Magisk
+    PIF_MOD=$(adb shell "ls /data/adb/modules 2>/dev/null | grep -iE 'playintegrity|pif|integrit'" | tr -d '\r')
+    if [ -n "$PIF_MOD" ]; then
+        log_output "${R}[!] Módulo PIF en Magisk: $PIF_MOD${N}"; ((SUSPICIOUS_COUNT+=3)); FOUND_PIF=1
+    fi
+
+    # TrickyStore
+    TRICK=$(adb shell "ls /data/adb/modules 2>/dev/null | grep -i trick" | tr -d '\r')
+    if [ -n "$TRICK" ]; then
+        log_output "${R}[!] TrickyStore (bypass de integridad): $TRICK${N}"; ((SUSPICIOUS_COUNT+=3)); FOUND_PIF=1
+    fi
+
+    # Fingerprint adulterado
+    BUILD_ID=$(adb shell "getprop ro.build.id 2>/dev/null" | tr -d '\r')
+    SYS_BUILD_ID=$(adb shell "getprop ro.system.build.id 2>/dev/null" | tr -d '\r')
+    if [ -n "$BUILD_ID" ] && [ -n "$SYS_BUILD_ID" ] && [ "$BUILD_ID" != "$SYS_BUILD_ID" ]; then
+        log_output "${R}[!] Fingerprint adulterado: ro.build.id=$BUILD_ID ≠ ro.system.build.id=$SYS_BUILD_ID${N}"
+        ((SUSPICIOUS_COUNT+=2)); FOUND_PIF=1
+    fi
+
+    # ro.debuggable
+    DEBUGGABLE=$(adb shell "getprop ro.debuggable 2>/dev/null" | tr -d '\r')
+    if [ "$DEBUGGABLE" = "1" ]; then
+        log_output "${Y}[!] ro.debuggable=1 — dispositivo en modo debug${N}"; ((SUSPICIOUS_COUNT++))
+    fi
+
+    [ $FOUND_PIF -eq 0 ] && log_output "${G}[✓] Sin Play Integrity Fix${N}"
+    echo ""
+}
+
+check_device_spoof() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     DEVICE SPOOFING / EVASIÓN DE BAN                  ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_SPOOF=0
+
+    # Android ID sospechoso (entropía baja)
+    ANDROID_ID=$(adb shell "settings get secure android_id 2>/dev/null" | tr -d '\r\n')
+    log_output "${B}[*] Android ID: ${W}${ANDROID_ID:-no disponible}${N}"
+    if [ -n "$ANDROID_ID" ] && [ "$ANDROID_ID" != "null" ]; then
+        UNIQ=$(echo "$ANDROID_ID" | grep -oE '.' | sort -u | wc -l)
+        ID_LEN=${#ANDROID_ID}
+        if [ "$UNIQ" -le 2 ] || [ "$ID_LEN" -lt 15 ] 2>/dev/null; then
+            log_output "${R}[!] Android ID con patrón de spoof${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_SPOOF=1
+        fi
+    fi
+
+    # Serial SoC vs prop
+    HW_SERIAL=$(adb shell 'cat /sys/devices/soc0/serial_num 2>/dev/null || cat /sys/bus/soc/devices/soc0/serial_num 2>/dev/null' | tr -d '\r\n')
+    PROP_SERIAL=$(adb shell "getprop ro.serialno 2>/dev/null" | tr -d '\r\n')
+    if [ -n "$HW_SERIAL" ] && [ -n "$PROP_SERIAL" ] && [ "$HW_SERIAL" != "$PROP_SERIAL" ]; then
+        log_output "${R}[!] Serial adulterado — SoC: $HW_SERIAL ≠ prop: $PROP_SERIAL${N}"
+        ((SUSPICIOUS_COUNT+=3)); FOUND_SPOOF=1
+    fi
+
+    # Apps de spoof de ID
+    PKG_LIST_SP=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    for pkg in "com.metatech.deviceidfaker" "com.deviceid.changer" "com.xposed.imei" "com.imei.generator" "com.devicechanger.free"; do
+        if echo "$PKG_LIST_SP" | grep -q "$pkg"; then
+            log_output "${R}[!] App de spoof de ID: $pkg${N}"; ((SUSPICIOUS_COUNT+=3)); FOUND_SPOOF=1
+        fi
+    done
+    SPOOF_NAME=$(echo "$PKG_LIST_SP" | grep -iE "deviceid|imei.changer|fakeid|androidid" | head -3)
+    if [ -n "$SPOOF_NAME" ]; then
+        log_output "${R}[!] App de spoof por nombre:${N}"
+        echo "$SPOOF_NAME" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_SPOOF=1
+    fi
+
+    # Reinstalación post-ban
+    FIRST_INSTALL_MS=$(adb shell "dumpsys package $GAME_PKG 2>/dev/null | grep firstInstallTime | head -1 | grep -oE '[0-9]{10,}'" | tr -d '\r')
+    UPTIME_SECS=$(adb shell "cut -d. -f1 /proc/uptime 2>/dev/null" | tr -d '\r')
+    NOW_SECS=$(adb shell "date +%s 2>/dev/null" | tr -d '\r')
+    if [ -n "$FIRST_INSTALL_MS" ] && [ -n "$NOW_SECS" ] && [ -n "$UPTIME_SECS" ]; then
+        FIRST_S=$((FIRST_INSTALL_MS / 1000))
+        BOOT_EPOCH=$((NOW_SECS - UPTIME_SECS))
+        INSTALL_DAYS=$(( (NOW_SECS - FIRST_S) / 86400 ))
+        UPTIME_DAYS=$((UPTIME_SECS / 86400))
+        log_output "${B}[*] Juego instalado hace: ${W}${INSTALL_DAYS}d${N}  |  Uptime: ${W}${UPTIME_DAYS}d${N}"
+        if [ "$FIRST_S" -gt "$BOOT_EPOCH" ] && [ "$UPTIME_SECS" -gt 86400 ] 2>/dev/null; then
+            log_output "${Y}[!] Juego instalado después del último boot (reinstalación post-ban)${N}"
+            ((SUSPICIOUS_COUNT+=2)); FOUND_SPOOF=1
+        fi
+        if [ "$INSTALL_DAYS" -le 3 ] && [ "$UPTIME_DAYS" -ge 7 ] 2>/dev/null; then
+            log_output "${Y}[!] Reinstalación reciente: juego ${INSTALL_DAYS}d vs dispositivo activo ${UPTIME_DAYS}d${N}"
+            ((SUSPICIOUS_COUNT++)); FOUND_SPOOF=1
+        fi
+    fi
+
+    [ $FOUND_SPOOF -eq 0 ] && log_output "${G}[✓] Sin indicadores de spoof${N}"
+    echo ""
+}
+
+check_ca_certs() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     CERTIFICADOS CA / MITM                            ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    USER_CERTS=$(adb shell "ls /data/misc/user/0/cacerts-added/ 2>/dev/null | wc -l" | tr -d '\r')
+    if [ "${USER_CERTS:-0}" -gt 0 ] 2>/dev/null; then
+        log_output "${R}[!] $USER_CERTS certificado(s) CA de usuario instalado(s) — posible MITM${N}"; ((SUSPICIOUS_COUNT+=2))
+    else
+        log_output "${G}[✓] Sin CA certs de usuario${N}"
+    fi
+
+    KC_CERTS=$(adb shell "ls /data/misc/keychain/certs-added/ 2>/dev/null | wc -l" | tr -d '\r')
+    if [ "${KC_CERTS:-0}" -gt 0 ] 2>/dev/null; then
+        log_output "${Y}[!] $KC_CERTS cert(s) en keychain del sistema${N}"; ((SUSPICIOUS_COUNT++))
+    fi
+
+    SSH_KEYS=$(adb shell "find /data/adb /data/local /sdcard 2>/dev/null -maxdepth 4 \( -name 'authorized_keys' -o -name 'id_rsa' -o -name 'id_ed25519' \) | head -3" | tr -d '\r')
+    if [ -n "$(echo "$SSH_KEYS" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] Claves SSH encontradas (tunnel de evasión):${N}"
+        echo "$SSH_KEYS" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
+        ((SUSPICIOUS_COUNT+=2))
+    fi
+    echo ""
+}
+
+check_mantis_keymap() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     KEYMAPPERS / CONTROLES EXTERNOS                   ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_KM=0
+
+    PKG_LIST_KM=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    declare -A KM_APPS
+    KM_APPS=(
+        ["com.mantis.gamepad"]="Mantis Gamepad"
+        ["com.panda.gamepad"]="Panda Gamepad"
+        ["com.gamesir.global"]="GameSir"
+        ["com.flydigi.center"]="Flydigi"
+        ["com.tincore.gsp.gpad"]="Octopus Keymapper"
+        ["io.github.ggmouse"]="GG Mouse"
+        ["com.regula.mantisactivator"]="Mantis Activator"
+    )
+    for pkg in "${!KM_APPS[@]}"; do
+        if echo "$PKG_LIST_KM" | grep -q "$pkg"; then
+            log_output "${Y}[!] Keymapper: ${KM_APPS[$pkg]} ($pkg)${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_KM=1
+        fi
+    done
+    KM_NAME=$(echo "$PKG_LIST_KM" | grep -iE "mantis|keymap|gamepad.*activat" | head -3)
+    if [ -n "$KM_NAME" ] && [ $FOUND_KM -eq 0 ]; then
+        log_output "${Y}[!] Keymapper por nombre:${N}"
+        echo "$KM_NAME" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
+        ((SUSPICIOUS_COUNT+=2)); FOUND_KM=1
+    fi
+
+    [ $FOUND_KM -eq 0 ] && log_output "${G}[✓] Sin keymappers${N}"
+    echo ""
+}
+
+check_recording() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     GRABACIÓN / ESPEJAMIENTO / SCRCPY                 ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_REC=0
+
+    PKG_LIST_REC=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    declare -A MIRROR_APPS
+    MIRROR_APPS=(
+        ["com.koushikdutta.vysor"]="Vysor"
+        ["com.genymobile.scrcpy"]="scrcpy"
+        ["com.github.xianfeng92.scrcpy"]="QtScrcpy"
+        ["top.samir.guiscrcpy"]="guiScrcpy"
+    )
+    for pkg in "${!MIRROR_APPS[@]}"; do
+        if echo "$PKG_LIST_REC" | grep -q "$pkg"; then
+            log_output "${Y}[!] App de espejamiento: ${MIRROR_APPS[$pkg]}${N}"; ((SUSPICIOUS_COUNT++)); FOUND_REC=1
+        fi
+    done
+
+    # Media projection activa
+    MEDIA_PROJ=$(adb shell "dumpsys media_projection 2>/dev/null | grep -iE 'isRecording=true|state=STARTED' | head -2" | tr -d '\r')
+    if [ -n "$(echo "$MEDIA_PROJ" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] CAPTURA DE PANTALLA ACTIVA${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_REC=1
+    fi
+
+    # Proceso scrcpy activo
+    SCRCPY_PROC=$(adb shell "ps -A 2>/dev/null | grep -i scrcpy" | tr -d '\r')
+    if [ -n "$SCRCPY_PROC" ]; then
+        log_output "${R}[!] Proceso scrcpy activo${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_REC=1
+    fi
+
+    # Record lock en sockets Unix
+    REC_LOCK=$(adb shell "cat /proc/net/unix 2>/dev/null | grep -iE 'recordLock|recordUnlock' | head -2" | tr -d '\r')
+    if [ -n "$(echo "$REC_LOCK" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] Record lock en sockets Unix${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_REC=1
+    fi
+
+    [ $FOUND_REC -eq 0 ] && log_output "${G}[✓] Sin grabación activa${N}"
+    echo ""
+}
+
+check_scenes() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     MODIFICACIÓN DE ESCENAS / ASSETS / PAYLOAD        ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_SC=0
+
+    # .ndkvs (FF modificado)
+    NDKVS=$(adb shell "find /sdcard/Android/data/$GAME_PKG -name '*.ndkvs' 2>/dev/null | head -3" | tr -d '\r')
+    if [ -n "$(echo "$NDKVS" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] Archivo .ndkvs detectado (Free Fire modificado):${N}"
+        echo "$NDKVS" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_SC=1
+    fi
+
+    # Assets non-UnityFS en gameassetbundles
+    SCENE_DIR="/sdcard/Android/data/$GAME_PKG/files/contentcache/Optional/android/gameassetbundles"
+    NON_UNITY=$(adb shell "find '$SCENE_DIR' -type f 2>/dev/null | while read f; do h=\$(head -c 7 \"\$f\" 2>/dev/null); [ \"\$h\" != 'UnityFS' ] && echo \"\$f\"; done | head -5" | tr -d '\r')
+    if [ -n "$(echo "$NON_UNITY" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] Assets no-UnityFS (posible wallhack/scene mod):${N}"
+        echo "$NON_UNITY" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_SC=1
+    fi
+
+    # Exploit/payload en /data/local/tmp
+    EXPLOITS=$(adb shell "find /data/local/tmp 2>/dev/null \( -name '*.so' -o -name 'payload*' -o -name 'exploit*' -o -name '*.bin' \) | head -5" | tr -d '\r')
+    if [ -n "$(echo "$EXPLOITS" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] Exploit/payload en /data/local/tmp:${N}"
+        echo "$EXPLOITS" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_SC=1
+    fi
+
+    [ $FOUND_SC -eq 0 ] && log_output "${G}[✓] Sin modificación de escenas/assets${N}"
+    echo ""
+}
+
 show_summary() {
     log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
     log_output "${C}║${W}              RESUMEN DEL ANÁLISIS                     ${C}║${N}"
@@ -1139,3 +1399,4 @@ show_summary() {
 # ─────────────────────────────────────────────────────────────
 check_storage
 main_menu
+
