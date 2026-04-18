@@ -1,10 +1,3 @@
-#!/data/data/com.termux/files/usr/bin/bash
-
-# ============================================
-# FREE FIRE ANTI-CHEAT SCANNER
-# Creado por: TIZI.XIT
-# Versión: 1.3.0
-# ============================================
 
 R='\033[1;31m'
 G='\033[1;32m'
@@ -16,6 +9,7 @@ W='\033[1;37m'
 N='\033[0m'
 
 BACKEND_URL="https://unknown-scanner-backend-v1-0.onrender.com"
+STATS_FILE="$HOME/.unknown_scanner_uses"
 
 LOGFILE="$HOME/anticheat_log_$(date +%Y%m%d_%H%M%S).txt"
 SUSPICIOUS_COUNT=0
@@ -23,13 +17,26 @@ GAME_SELECTED=""
 GAME_PKG=""
 DEVICE_HWID=""
 
-# ─────────────────────────────────────────────────────────────
 _xd() { local b="$1" o="" c d i; while [ ${#b} -ge 8 ]; do c="${b:0:8}"; b="${b:8}"; d=0; for (( i=0; i<8; i++ )); do d=$(( d*2 + ${c:$i:1} )); done; o+=$(printf "\\$(printf '%03o' $d)"); done; printf '%s' "$o"; }
 REPLAY_HWID_WHITELIST=(
 "$(_xd 0011100000110010001100100011001000110101001100010011100001100011001101100011100001100010001101010110010101100001011000100011001100110011001110010110011000111000011001000011000100110001001100110110000100110011011001010011010001100010001100110110001100110101)"
 )
-# ─────────────────────────────────────────────────────────────
 
+registrar_uso() {
+    local count=1
+    [ -f "$STATS_FILE" ] && count=$(( $(cat "$STATS_FILE" 2>/dev/null || echo 0) + 1 ))
+    echo "$count" > "$STATS_FILE"
+    curl -sf --max-time 4 -X POST "${BACKEND_URL}/api/stats/scan" \
+        -H "Content-Type: application/json" \
+        -d '{"version":"1.3.0"}' &>/dev/null &
+}
+
+obtener_stats_global() {
+    local resp total
+    resp=$(curl -sf --max-time 5 "${BACKEND_URL}/api/stats/scan" 2>/dev/null)
+    total=$(echo "$resp" | grep -o '"total":[0-9]*' | grep -o '[0-9]*')
+    [ -n "$total" ] && echo "$total" || echo "?"
+}
 
 obter_hwid_real() {
     local android_id serial boot_serial
@@ -39,7 +46,6 @@ obter_hwid_real() {
     printf '%s:%s:%s' "$android_id" "$serial" "$boot_serial" \
         | md5sum | cut -d' ' -f1
 }
-
 
 verificar_hwid_ban() {
     echo -e "${B}[*] Verificando dispositivo...${N}"
@@ -55,7 +61,6 @@ verificar_hwid_ban() {
     respuesta=$(curl -sf --max-time 6 \
         "${BACKEND_URL}/api/ban/check?hwid=${DEVICE_HWID}" 2>/dev/null)
 
-    # Sin conexión → 
     if [ -z "$respuesta" ]; then
         return 0
     fi
@@ -110,8 +115,11 @@ banner() {
     }
 
     printf "%b\n" "${C}${top}${N}"
+    local _g; _g=$(obtener_stats_global)
+    local _l; _l=$(cat "$STATS_FILE" 2>/dev/null || echo "0")
     printf "%b\n" "${C}║${M}$( _center "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM" )${C}║${N}"
-    printf "%b\n" "${C}║${M}$( _center "VERSIÓN 1.3.0" )${C}║${N}"
+    printf "%b\n" "${C}║${M}$( _center "VERSIÓN 1.4.0" )${C}║${N}"
+    printf "%b\n" "${C}║${G}$( _center "Scans globales: ${_g}  |  Este dispositivo: ${_l}" )${C}║${N}"
     printf "%b\n" "${C}${bottom}${N}"
     echo ""
     printf "%b\n" "${Y}${top}${N}"
@@ -281,18 +289,13 @@ ver_ultimo_log() {
     echo -e "${W}Enter para volver...${N}"; read; main_menu
 }
 
-# ─────────────────────────────────────────────────────────────
-#  EJECUTAR SCAN
-# ─────────────────────────────────────────────────────────────
 ejecutar_scan() {
     clear; banner
-
     IG_URL="https://www.instagram.com/tizi_7zz?igsh=MTdndzJyb2hzeDJmZQ=="
     SEP="${Y}+========================================================+${N}"
     DIV="${Y}+--------------------------------------------------------+${N}"
-
     echo -e "$SEP"
-    echo -e "${Y}|${R}     ⚠   ATENCION  --  LEER ANTES DE CONTINUAR   ⚠     ${Y}|${N}"
+    echo -e "${Y}|${R}     !   ATENCION  --  LEER ANTES DE CONTINUAR   !     ${Y}|${N}"
     echo -e "$SEP"
     echo -e "${Y}|${N}"
     echo -e "${Y}|${W}  Garena hizo una actualizacion que rompio el sistema${N}"
@@ -311,19 +314,27 @@ ejecutar_scan() {
     echo -e "$DIV"
     echo -e "${Y}|${C}  No sabes como revisar? Sin problema:${N}"
     echo -e "${Y}|${W}  Mandame captura a Instagram y te ayudo gratis.${N}"
-    echo -e "${Y}|${W}  Mantengamos un ambiente limpio juntos. ${N}"
+    echo -e "${Y}|${W}  Mantengamos un ambiente limpio juntos.${N}"
     echo -e "${Y}|${N}"
-    echo -e "${Y}|${M}  📸 Instagram:${N}"
-    printf "  [1;33m|[0m  [1;35m]8;;%s\instagram.com/tizi_7zz  <-- TOCAR AQUI]8;;\\[0m
-" "$IG_URL"
+    echo -e "${Y}|${M}  Instagram: @tizi_7zz${N}"
     echo -e "${Y}|${N}"
     echo -e "$SEP"
     echo -e "${Y}|${M}       Gracias por leer -- TIZI  *  UNKNOWN TEAM${N}"
     echo -e "$SEP"
     echo ""
-    echo -ne "${W}  Presiona ${G}[ENTER]${W} para iniciar el analisis... ${N}"; read
+    echo -ne "${W}  [ENTER] iniciar scan / [I] abrir Instagram: ${N}"
+    read -r _opc
+    if [[ "${_opc,,}" == "i" ]]; then
+        if command -v termux-open-url &>/dev/null; then
+            termux-open-url "$IG_URL"
+        else
+            am start -a android.intent.action.VIEW -d "$IG_URL" &>/dev/null
+        fi
+        echo -ne "${W}  Presiona [ENTER] para continuar... ${N}"; read
+    fi
 
     clear; banner
+    registrar_uso
     log_output "${B}[*] Escaneando: $GAME_SELECTED${N}\n"
 
     if ! adb devices | grep -q "device$"; then
@@ -376,10 +387,6 @@ ejecutar_scan() {
     main_menu
 }
 
-# ─────────────────────────────────────────────────────────────
-#  MÓDULOS
-# ─────────────────────────────────────────────────────────────
-
 check_device_info() {
     log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
     log_output "${C}║${W}         INFORMACIÓN DEL DISPOSITIVO                   ${C}║${N}"
@@ -404,7 +411,6 @@ check_root() {
 check_uptime() {
     UPTIME=$(adb shell uptime | tr -d '\r')
     log_output "${B}[*] Uptime: ${W}$UPTIME${N}"
-    # Solo marcar si lleva menos de 10 minutos encendido (reinicio muy reciente)
     if echo "$UPTIME" | grep -qE "up [0-9]+ min" && ! echo "$UPTIME" | grep -qE "up [1-9][0-9]+ min"; then
         log_output "${R}[!] Reinicio muy reciente (menos de 10 min) — sospechoso${N}\n"
         ((SUSPICIOUS_COUNT++))
@@ -486,8 +492,6 @@ check_time_changes() {
 }
 
 check_clipboard() {
-    # hcallSetClipboardTextRpc = log interno de FF cuando el juego copia texto al portapapeles
-    # Los cheats suelen copiar UIDs, coordenadas o tokens usando esto
     log_output "${B}[+] Verificando uso de clipboard por Free Fire...${N}"
     CLIP=$(adb logcat -d 2>/dev/null | grep 'hcallSetClipboardTextRpc' | tail -5)
     if [ -n "$CLIP" ]; then
@@ -547,7 +551,6 @@ check_vpn_dns() {
         fi
     done
 
-    # Interfaz VPN activa en la red
     VPN_IF=$(adb shell "ip link show 2>/dev/null | grep -iE 'tun[0-9]|tap[0-9]|ppp[0-9]'" | tr -d '\r')
     if [ -n "$VPN_IF" ]; then
         log_output "${R}[!] INTERFAZ VPN ACTIVA: $VPN_IF${N}"
@@ -557,14 +560,11 @@ check_vpn_dns() {
     [ $VPN_DETECTED -eq 0 ] && log_output "${G}[✓] Sin VPN detectada${N}"
     echo ""
 
-    # DNS — solo flagear si el servidor DNS es claramente un proxy cheat
-    # No flagear Cloudflare/Google porque son legítimos en la mayoría de casos
     log_output "${B}[+] Verificando DNS privado...${N}"
     PRIVATE_DNS_MODE=$(adb shell "settings get global private_dns_mode" 2>/dev/null | tr -d '\r')
     PRIVATE_DNS_HOST=$(adb shell "settings get global private_dns_specifier" 2>/dev/null | tr -d '\r')
 
     if [ "$PRIVATE_DNS_MODE" = "hostname" ] && [ -n "$PRIVATE_DNS_HOST" ] && [ "$PRIVATE_DNS_HOST" != "null" ]; then
-        # Solo sospechoso si el hostname del DNS privado parece un servidor de cheat
         if echo "$PRIVATE_DNS_HOST" | grep -qiE "proxy|cheat|hack|vpn\."; then
             log_output "${R}[!] DNS PRIVADO SOSPECHOSO: $PRIVATE_DNS_HOST${N}"
             ((SUSPICIOUS_COUNT++))
@@ -637,16 +637,12 @@ check_replays() {
     log_output "${C}║${W}              ANÁLISIS DE REPLAYS                      ${C}║${N}"
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
 
-    # ── Whitelist de compatibilidad ──────────────────────────
-    log_output "${B}[*] HWID dispositivo: ${Y}${DEVICE_HWID:-[vacío]}${N}"
-    for _wl_hwid in "${REPLAY_HWID_WHITELIST[@]}"; do
-        if [ "$DEVICE_HWID" = "$_wl_hwid" ]; then
-            log_output "${B}[*] Dispositivo en whitelist — análisis de replays omitido${N}"
-            echo ""
-            return 0
+    for _wl in "${REPLAY_HWID_WHITELIST[@]}"; do
+        if [ "$DEVICE_HWID" = "$_wl" ]; then
+            log_output "${B}[*] Dispositivo exento — analisis de replays omitido${N}"
+            echo ""; return 0
         fi
     done
-    # ────────────────────────────────────────────────────────
 
     REPLAY_DIR="/sdcard/Android/data/$GAME_PKG/files/MReplays"
     MOTIVOS=()
@@ -741,7 +737,7 @@ check_replays() {
 
     echo ""
     if [ ${#MOTIVOS[@]} -gt 0 ]; then
-        log_output "${Y}[!] ⚠ ANOMALÍAS EN REPLAYS — REVISAR MANUALMENTE — POSIBLE FALSO POSITIVO${N}"
+        log_output "${Y}[!] ANOMALIAS EN REPLAYS - REVISAR MANUALMENTE - POSIBLE FALSO POSITIVO${N}"
         for m in "${MOTIVOS[@]}"; do log_output "${Y}    - $m${N}"; done
         ((SUSPICIOUS_COUNT+=3))
     else
@@ -814,7 +810,6 @@ check_root_bypass() {
     log_output "${B}[+] Verificando Magisk, Shamiko, Zygisk...${N}"
     BYPASS_FOUND=0
 
-    # Verificar procesos — excluir knox que es Samsung legítimo
     BYPASS_PS=$(adb shell "ps -A 2>/dev/null | grep -iE 'magisk|shamiko|zygisk|busybox'" | grep -viE 'knox' | tr -d '\r')
     if [ -n "$BYPASS_PS" ]; then
         log_output "${R}[!] ROOT BYPASS DETECTADO (proceso)${N}"
@@ -822,7 +817,6 @@ check_root_bypass() {
         ((SUSPICIOUS_COUNT+=3)); BYPASS_FOUND=1
     fi
 
-    # Verificar archivos de Magisk
     MAGISK_FILES=$(adb shell "ls /data/adb/magisk 2>/dev/null" | tr -d '\r')
     if [ -n "$MAGISK_FILES" ]; then
         log_output "${R}[!] MAGISK DETECTADO (/data/adb/magisk existe)${N}"
@@ -875,7 +869,6 @@ check_tooling() {
     log_output "${B}[+] Verificando emuladores y herramientas sospechosas...${N}"
     TOOL_FOUND=0
 
-    # Detectar emuladores reales — filtrar props con valor [0] o [] que son normales en Android físico
     EMULATOR_PROPS=$(adb shell "getprop 2>/dev/null | grep -iE 'qemu|goldfish|vbox|genymotion|nox|memu|bluestacks|andy|droid4x'" \
         | grep -viE 'knox|samsung|\]: \[0\]|\]: \[\]' | tr -d '\r')
     if [ -n "$EMULATOR_PROPS" ]; then
@@ -884,7 +877,6 @@ check_tooling() {
         ((SUSPICIOUS_COUNT+=2)); TOOL_FOUND=1
     fi
 
-    # Proceso qemu (emulador Android Studio / Genymotion)
     QEMU_PROC=$(adb shell "ps -A 2>/dev/null | grep -iE 'qemu|genymotion|bluestacks'" | grep -viE 'knox' | tr -d '\r')
     if [ -n "$QEMU_PROC" ]; then
         log_output "${R}[!] PROCESO DE EMULADOR DETECTADO${N}"
@@ -892,7 +884,6 @@ check_tooling() {
         ((SUSPICIOUS_COUNT+=2)); TOOL_FOUND=1
     fi
 
-    # Verificar si ro.kernel.qemu = 1 (emulador real)
     QEMU_FLAG=$(adb shell "getprop ro.kernel.qemu 2>/dev/null" | tr -d '\r')
     if [ "$QEMU_FLAG" = "1" ]; then
         log_output "${R}[!] EMULADOR CONFIRMADO (ro.kernel.qemu=1)${N}"
@@ -972,13 +963,11 @@ check_kernel() {
     else
         log_output "${G}[✓] SuSFS no detectado${N}"
     fi
-    # Kernels custom conocidos por soportar root nativamente
     CUSTOM_KERNELS=$(echo "$KERNEL" | grep -iE "alucard|chronos|sultan|lychee|eureka|ethereal|elitekernel|wild|buddy|panda|redmi-oc")
     if [ -n "$CUSTOM_KERNELS" ]; then
         log_output "${R}[!] Kernel custom con soporte root: $CUSTOM_KERNELS${N}"; ((SUSPICIOUS_COUNT+=2))
     fi
 
-    # KernelSU Next en props
     KSUNEXT_PROP=$(adb shell "getprop 2>/dev/null | grep -im1 'ksunext\|com\.rifsxd'" | tr -d '\r')
     if [ -n "$KSUNEXT_PROP" ]; then
         log_output "${R}[!] KernelSU Next detectado en props: $KSUNEXT_PROP${N}"; ((SUSPICIOUS_COUNT+=3))
@@ -1187,7 +1176,6 @@ check_pif() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     FOUND_PIF=0
 
-    # Paquetes PIF conocidos
     PKG_LIST_PIF=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
     for pkg in "es.chiteroman.playintegrityfix" "com.chiteroman.playintegrityfix" "io.github.vvb2060.playintegrityfix"; do
         if echo "$PKG_LIST_PIF" | grep -q "$pkg"; then
@@ -1195,19 +1183,16 @@ check_pif() {
         fi
     done
 
-    # Módulo PIF en Magisk
     PIF_MOD=$(adb shell "ls /data/adb/modules 2>/dev/null | grep -iE 'playintegrity|pif|integrit'" | tr -d '\r')
     if [ -n "$PIF_MOD" ]; then
         log_output "${R}[!] Módulo PIF en Magisk: $PIF_MOD${N}"; ((SUSPICIOUS_COUNT+=3)); FOUND_PIF=1
     fi
 
-    # TrickyStore
     TRICK=$(adb shell "ls /data/adb/modules 2>/dev/null | grep -i trick" | tr -d '\r')
     if [ -n "$TRICK" ]; then
         log_output "${R}[!] TrickyStore (bypass de integridad): $TRICK${N}"; ((SUSPICIOUS_COUNT+=3)); FOUND_PIF=1
     fi
 
-    # Fingerprint adulterado
     BUILD_ID=$(adb shell "getprop ro.build.id 2>/dev/null" | tr -d '\r')
     SYS_BUILD_ID=$(adb shell "getprop ro.system.build.id 2>/dev/null" | tr -d '\r')
     if [ -n "$BUILD_ID" ] && [ -n "$SYS_BUILD_ID" ] && [ "$BUILD_ID" != "$SYS_BUILD_ID" ]; then
@@ -1215,7 +1200,6 @@ check_pif() {
         ((SUSPICIOUS_COUNT+=2)); FOUND_PIF=1
     fi
 
-    # ro.debuggable
     DEBUGGABLE=$(adb shell "getprop ro.debuggable 2>/dev/null" | tr -d '\r')
     if [ "$DEBUGGABLE" = "1" ]; then
         log_output "${Y}[!] ro.debuggable=1 — dispositivo en modo debug${N}"; ((SUSPICIOUS_COUNT++))
@@ -1231,7 +1215,6 @@ check_device_spoof() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     FOUND_SPOOF=0
 
-    # Android ID sospechoso (entropía baja)
     ANDROID_ID=$(adb shell "settings get secure android_id 2>/dev/null" | tr -d '\r\n')
     log_output "${B}[*] Android ID: ${W}${ANDROID_ID:-no disponible}${N}"
     if [ -n "$ANDROID_ID" ] && [ "$ANDROID_ID" != "null" ]; then
@@ -1242,7 +1225,6 @@ check_device_spoof() {
         fi
     fi
 
-    # Serial SoC vs prop
     HW_SERIAL=$(adb shell 'cat /sys/devices/soc0/serial_num 2>/dev/null || cat /sys/bus/soc/devices/soc0/serial_num 2>/dev/null' | tr -d '\r\n')
     PROP_SERIAL=$(adb shell "getprop ro.serialno 2>/dev/null" | tr -d '\r\n')
     if [ -n "$HW_SERIAL" ] && [ -n "$PROP_SERIAL" ] && [ "$HW_SERIAL" != "$PROP_SERIAL" ]; then
@@ -1250,7 +1232,6 @@ check_device_spoof() {
         ((SUSPICIOUS_COUNT+=3)); FOUND_SPOOF=1
     fi
 
-    # Apps de spoof de ID
     PKG_LIST_SP=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
     for pkg in "com.metatech.deviceidfaker" "com.deviceid.changer" "com.xposed.imei" "com.imei.generator" "com.devicechanger.free"; do
         if echo "$PKG_LIST_SP" | grep -q "$pkg"; then
@@ -1264,7 +1245,6 @@ check_device_spoof() {
         ((SUSPICIOUS_COUNT+=3)); FOUND_SPOOF=1
     fi
 
-    # Reinstalación post-ban
     FIRST_INSTALL_MS=$(adb shell "dumpsys package $GAME_PKG 2>/dev/null | grep firstInstallTime | head -1 | grep -oE '[0-9]{10,}'" | tr -d '\r')
     UPTIME_SECS=$(adb shell "cut -d. -f1 /proc/uptime 2>/dev/null" | tr -d '\r')
     NOW_SECS=$(adb shell "date +%s 2>/dev/null" | tr -d '\r')
@@ -1367,19 +1347,16 @@ check_recording() {
         fi
     done
 
-    # Media projection activa
     MEDIA_PROJ=$(adb shell "dumpsys media_projection 2>/dev/null | grep -iE 'isRecording=true|state=STARTED' | head -2" | tr -d '\r')
     if [ -n "$(echo "$MEDIA_PROJ" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] CAPTURA DE PANTALLA ACTIVA${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_REC=1
     fi
 
-    # Proceso scrcpy activo
     SCRCPY_PROC=$(adb shell "ps -A 2>/dev/null | grep -i scrcpy" | tr -d '\r')
     if [ -n "$SCRCPY_PROC" ]; then
         log_output "${R}[!] Proceso scrcpy activo${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_REC=1
     fi
 
-    # Record lock en sockets Unix
     REC_LOCK=$(adb shell "cat /proc/net/unix 2>/dev/null | grep -iE 'recordLock|recordUnlock' | head -2" | tr -d '\r')
     if [ -n "$(echo "$REC_LOCK" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] Record lock en sockets Unix${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_REC=1
@@ -1395,7 +1372,6 @@ check_scenes() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     FOUND_SC=0
 
-    # .ndkvs (FF modificado)
     NDKVS=$(adb shell "find /sdcard/Android/data/$GAME_PKG -name '*.ndkvs' 2>/dev/null | head -3" | tr -d '\r')
     if [ -n "$(echo "$NDKVS" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] Archivo .ndkvs detectado (Free Fire modificado):${N}"
@@ -1403,7 +1379,6 @@ check_scenes() {
         ((SUSPICIOUS_COUNT+=3)); FOUND_SC=1
     fi
 
-    # Assets non-UnityFS en gameassetbundles
     SCENE_DIR="/sdcard/Android/data/$GAME_PKG/files/contentcache/Optional/android/gameassetbundles"
     NON_UNITY=$(adb shell "find '$SCENE_DIR' -type f 2>/dev/null | while read f; do h=\$(head -c 7 \"\$f\" 2>/dev/null); [ \"\$h\" != 'UnityFS' ] && echo \"\$f\"; done | head -5" | tr -d '\r')
     if [ -n "$(echo "$NON_UNITY" | tr -d '[:space:]')" ]; then
@@ -1412,7 +1387,6 @@ check_scenes() {
         ((SUSPICIOUS_COUNT+=3)); FOUND_SC=1
     fi
 
-    # Exploit/payload en /data/local/tmp
     EXPLOITS=$(adb shell "find /data/local/tmp 2>/dev/null \( -name '*.so' -o -name 'payload*' -o -name 'exploit*' -o -name '*.bin' \) | head -5" | tr -d '\r')
     if [ -n "$(echo "$EXPLOITS" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] Exploit/payload en /data/local/tmp:${N}"
@@ -1450,9 +1424,6 @@ show_summary() {
     log_output "\n${M}[*] Log: ${W}$LOGFILE${N}"
 }
 
-# ─────────────────────────────────────────────────────────────
-#  INICIO
-# ─────────────────────────────────────────────────────────────
 check_storage
 main_menu
 
