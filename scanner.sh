@@ -118,7 +118,7 @@ banner() {
     local _g; _g=$(obtener_stats_global)
     local _l; _l=$(cat "$STATS_FILE" 2>/dev/null || echo "0")
     printf "%b\n" "${C}║${M}$( _center "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM" )${C}║${N}"
-    printf "%b\n" "${C}║${M}$( _center "VERSIÓN 1.4.0" )${C}║${N}"
+    printf "%b\n" "${C}║${M}$( _center "VERSIÓN 1.3.0" )${C}║${N}"
     printf "%b\n" "${C}║${G}$( _center "Scans globales: ${_g}  |  Este dispositivo: ${_l}" )${C}║${N}"
     printf "%b\n" "${C}${bottom}${N}"
     echo ""
@@ -305,7 +305,7 @@ ejecutar_scan() {
     echo -e "${Y}|${W}  Ya se incorporo un sistema de aviso para estos casos.${N}"
     echo -e "${Y}|${N}"
     echo -e "$DIV"
-    echo -e "${Y}|${C}  Para los SS que analizan:${N}"
+    echo -e "${Y}|${C}  Para los SS:${N}"
     echo -e "${Y}|${W}    * Usen herramientas como Logcat, Brevent, etc.${N}"
     echo -e "${Y}|${W}    * NO apliquen W.O unicamente por el scanner.${N}"
     echo -e "${Y}|${W}    * El scanner puede cometer falsos positivos.${N}"
@@ -959,7 +959,7 @@ check_kernel() {
     fi
     SUSFS=$(adb shell '{ test -d /proc/sys/fs/susfs && echo FOUND; } || { test -d /sys/kernel/security/susfs && echo FOUND; } || echo NOTFOUND' | tr -d '\r')
     if echo "$SUSFS" | grep -q "FOUND"; then
-        log_output "${R}[!] SuSFS detectado (oculta montajes de KernelSU)${N}"; ((SUSPICIOUS_COUNT+=3))
+        log_output "${B}[*] SuSFS presente (informativo — presente en kernels stock recientes)${N}"
     else
         log_output "${G}[✓] SuSFS no detectado${N}"
     fi
@@ -1380,7 +1380,11 @@ check_scenes() {
     fi
 
     SCENE_DIR="/sdcard/Android/data/$GAME_PKG/files/contentcache/Optional/android/gameassetbundles"
-    NON_UNITY=$(adb shell "find '$SCENE_DIR' -type f 2>/dev/null | while read f; do h=\$(head -c 7 \"\$f\" 2>/dev/null); [ \"\$h\" != 'UnityFS' ] && echo \"\$f\"; done | head -5" | tr -d '\r')
+    NON_UNITY=$(adb shell "find '$SCENE_DIR' -type f 2>/dev/null | while read f; do
+        case \"\$f\" in *\~*) continue ;; esac
+        h=\$(head -c 7 \"\$f\" 2>/dev/null)
+        [ \"\$h\" != 'UnityFS' ] && echo \"\$f\"
+    done | head -5" | tr -d '\r')
     if [ -n "$(echo "$NON_UNITY" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] Assets no-UnityFS (posible wallhack/scene mod):${N}"
         echo "$NON_UNITY" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
@@ -1411,9 +1415,9 @@ show_summary() {
         log_output "${G}╔════════════════════════════════════════════════════════╗${N}"
         log_output "${G}║              ✓ DISPOSITIVO LIMPIO ✓                   ║${N}"
         log_output "${G}╚════════════════════════════════════════════════════════╝${N}"
-    elif [ $SUSPICIOUS_COUNT -le 3 ]; then
+    elif [ $SUSPICIOUS_COUNT -lt 10 ]; then
         log_output "${Y}╔════════════════════════════════════════════════════════╗${N}"
-        log_output "${Y}║         ⚠ ADVERTENCIA: REVISAR MANUALMENTE ⚠          ║${N}"
+        log_output "${Y}║       ⚠  REVISAR MANUALMENTE — NO DAR W.O  ⚠          ║${N}"
         log_output "${Y}╚════════════════════════════════════════════════════════╝${N}"
     else
         log_output "${R}╔════════════════════════════════════════════════════════╗${N}"
