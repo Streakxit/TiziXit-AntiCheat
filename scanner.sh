@@ -381,6 +381,10 @@ ejecutar_scan() {
     check_data_local_tmp
     check_dropbox_crashes
     check_auto_time
+    check_termux_on_device
+    check_xiaomi_paths
+    check_active_dns
+    check_active_protocols
     show_summary
 
     echo -e "\n${W}Presiona Enter para volver al menú...${N}"; read
@@ -400,12 +404,30 @@ check_device_info() {
 }
 
 check_root() {
-    log_output "${B}[+] Verificando ROOT...${N}"
-    if adb shell "command -v su" 2>&1 | grep -q "/su"; then
-        log_output "${R}[!] ROOT DETECTADO${N}\n"; ((SUSPICIOUS_COUNT++))
-    else
-        log_output "${G}[✓] Sin ROOT${N}\n"
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}         DETECCIÓN DE ROOT / BINARIOS SU                ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_ROOT=0
+
+    log_output "${B}[+] Verificando binario su y variantes...${N}"
+    SU_PATHS=$(adb shell "find /system /sbin /su /data/adb /data/local/tmp /vendor 2>/dev/null \
+        \( -name 'su' -o -name 'su64' -o -name 'su32' -o -name 'su-back' \
+           -o -name '__su' -o -name 'off.su' -o -name 'Bksu' -o -name 'susu' \
+           -o -name 'su.sh' -o -name 'supersu' \) 2>/dev/null | head -10" | tr -d '\r')
+    if [ -n "$(echo "$SU_PATHS" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] BINARIO SU DETECTADO:${N}"
+        echo "$SU_PATHS" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_ROOT=1
     fi
+
+    SU_CMD=$(adb shell "command -v su 2>/dev/null; which su 2>/dev/null" | tr -d '\r' | head -1)
+    if [ -n "$(echo "$SU_CMD" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] ROOT: su accesible en PATH: $SU_CMD${N}"
+        ((SUSPICIOUS_COUNT+=2)); FOUND_ROOT=1
+    fi
+
+    [ $FOUND_ROOT -eq 0 ] && log_output "${G}[✓] Sin ROOT${N}"
+    echo ""
 }
 
 check_uptime() {
@@ -719,6 +741,16 @@ check_replays() {
 
     done <<< "$BINS_RAW"
 
+    OUTRO_JSON="$REPLAY_DIR/outro.json"
+    OUTRO_STAT=$(adb shell "stat '$OUTRO_JSON' 2>/dev/null" | tr -d '\r')
+    if [ -n "$OUTRO_STAT" ]; then
+        OUTRO_M=$(echo "$OUTRO_STAT" | grep "^Modify:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
+        OUTRO_C=$(echo "$OUTRO_STAT" | grep "^Change:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
+        [ "$OUTRO_M" != "$OUTRO_C" ] && [ -n "$OUTRO_M" ] && MOTIVOS+=("Motivo 15 - outro.json Modify != Change: manipulacion de metadata")
+        OUTRO_NANOS=$(echo "$OUTRO_M" | grep -oE '\.[0-9]+$')
+        echo "$OUTRO_NANOS" | grep -qE '\.0+$' && MOTIVOS+=("Motivo 16 - outro.json timestamps .000: copia/manipulacion")
+    fi
+
     PASTA_STAT=$(adb shell "stat '$REPLAY_DIR' 2>/dev/null" | tr -d '\r')
     if [ -n "$PASTA_STAT" ]; then
         PA=$(echo "$PASTA_STAT" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+' | head -1)
@@ -777,28 +809,45 @@ check_obb() {
 
 check_hooks() {
     log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}     DETECCIÓN DE HOOKING (Frida / Xposed / LSPosed)    ${C}║${N}"
+    log_output "${C}║${W}  HOOKING: Frida / Xposed / LSPosed / Shizuku / Inject  ${C}║${N}"
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_HOOK=0
 
     log_output "${B}[+] Verificando procesos de hooking...${N}"
-    HOOK_PROC=$(adb shell "ps -A 2>/dev/null | grep -iE 'frida|xposed|lsposed|zygisk|riru'" | tr -d '\r')
+    HOOK_PROC=$(adb shell "ps -A 2>/dev/null | grep -iE 'frida|xposed|lsposed|lspatch|zygisk|riru|shizuku|inject'" | tr -d '\r')
     if [ -n "$HOOK_PROC" ]; then
-        log_output "${R}[!] FRAMEWORK DE HOOKING DETECTADO (proceso)${N}"
+        log_output "${R}[!] PROCESO DE HOOKING ACTIVO:${N}"
         echo "$HOOK_PROC" | while read -r line; do log_output "${Y}  $line${N}"; done
-        ((SUSPICIOUS_COUNT+=3))
-    else
-        log_output "${G}[✓] Sin procesos de hooking${N}"
+        ((SUSPICIOUS_COUNT+=3)); FOUND_HOOK=1
     fi
 
     log_output "${B}[+] Verificando archivos de hooking...${N}"
-    HOOK_FILES=$(adb shell "find /data /system 2>/dev/null | grep -iE '/frida|/xposed|/lsposed' | grep -v 'knox' | head -10" | tr -d '\r')
+    HOOK_FILES=$(adb shell "find /data /system 2>/dev/null | grep -iE '/frida|/xposed|/lsposed|/lspatch|/riru|inject' | grep -v 'knox' | head -10" | tr -d '\r')
     if [ -n "$(echo "$HOOK_FILES" | tr -d '[:space:]')" ]; then
-        log_output "${R}[!] ARCHIVOS DE HOOKING DETECTADOS${N}"
+        log_output "${R}[!] ARCHIVOS DE HOOKING:${N}"
         echo "$HOOK_FILES" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
-        ((SUSPICIOUS_COUNT+=3))
-    else
-        log_output "${G}[✓] Sin archivos de hooking${N}"
+        ((SUSPICIOUS_COUNT+=3)); FOUND_HOOK=1
     fi
+
+    log_output "${B}[+] Verificando LSPatch / LSPosed crackeado / wrapper...${N}"
+    PKG_HOOK=$(adb shell "pm list packages 2>/dev/null | grep -iE 'lspatch|lsposed|crackedlsposed|lsposedwrapper'" | tr -d '\r')
+    if [ -n "$PKG_HOOK" ]; then
+        log_output "${R}[!] PAQUETE DE HOOKING INSTALADO:${N}"
+        echo "$PKG_HOOK" | while read -r p; do [ -n "$p" ] && log_output "${Y}  $p${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_HOOK=1
+    fi
+
+    log_output "${B}[+] Verificando Shizuku (escalada de privilegios)...${N}"
+    SHIZUKU=$(adb shell "pm list packages 2>/dev/null | grep -i 'shizuku'" | tr -d '\r')
+    SHIZUKU_SVC=$(adb shell "ps -A 2>/dev/null | grep -i 'shizuku'" | tr -d '\r')
+    if [ -n "$SHIZUKU" ] || [ -n "$SHIZUKU_SVC" ]; then
+        log_output "${R}[!] SHIZUKU DETECTADO (escalada de privilegios sin root):${N}"
+        [ -n "$SHIZUKU" ] && log_output "${Y}  Package: $SHIZUKU${N}"
+        [ -n "$SHIZUKU_SVC" ] && log_output "${Y}  Proceso: $SHIZUKU_SVC${N}"
+        ((SUSPICIOUS_COUNT+=3)); FOUND_HOOK=1
+    fi
+
+    [ $FOUND_HOOK -eq 0 ] && log_output "${G}[✓] Sin hooking detectado${N}"
     echo ""
 }
 
@@ -958,12 +1007,17 @@ check_kernel() {
         log_output "${Y}  $PROC_VER${N}"; ((SUSPICIOUS_COUNT+=2))
     fi
     SUSFS=$(adb shell '{ test -d /proc/sys/fs/susfs && echo FOUND; } || { test -d /sys/kernel/security/susfs && echo FOUND; } || echo NOTFOUND' | tr -d '\r')
+    PAGE_SIZE=$(adb shell "getprop ro.product.cpu.pagesize.max 2>/dev/null || cat /proc/sys/vm/mmap_min_addr 2>/dev/null" | tr -d '\r')
     if echo "$SUSFS" | grep -q "FOUND"; then
-        log_output "${B}[*] SuSFS presente (informativo — presente en kernels stock recientes)${N}"
+        if echo "$KERNEL" | grep -qE "\-16k|16k" || [ "$PAGE_SIZE" = "16384" ]; then
+            log_output "${B}[*] SuSFS-16k presente (kernel con páginas 16K — informativo)${N}"
+        else
+            log_output "${B}[*] SuSFS-4k presente (informativo — presente en kernels stock recientes)${N}"
+        fi
     else
         log_output "${G}[✓] SuSFS no detectado${N}"
     fi
-    CUSTOM_KERNELS=$(echo "$KERNEL" | grep -iE "alucard|chronos|sultan|lychee|eureka|ethereal|elitekernel|wild|buddy|panda|redmi-oc")
+    CUSTOM_KERNELS=$(echo "$KERNEL" | grep -iE "alucard|chronos|sultan|lychee|eureka|ethereal|elitekernel|wild|buddy|panda|redmi-oc|apatch")
     if [ -n "$CUSTOM_KERNELS" ]; then
         log_output "${R}[!] Kernel custom con soporte root: $CUSTOM_KERNELS${N}"; ((SUSPICIOUS_COUNT+=2))
     fi
@@ -1399,6 +1453,131 @@ check_scenes() {
     fi
 
     [ $FOUND_SC -eq 0 ] && log_output "${G}[✓] Sin modificación de escenas/assets${N}"
+    echo ""
+}
+
+check_termux_on_device() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     TERMUX / HERRAMIENTAS DE EVASION EN DISPOSITIVO    ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_TX=0
+
+    TERMUX_PKG=$(adb shell "pm list packages 2>/dev/null | grep -iE 'com.termux|termux'" | tr -d '\r')
+    if [ -n "$TERMUX_PKG" ]; then
+        log_output "${R}[!] TERMUX INSTALADO EN DISPOSITIVO ESCANEADO:${N}"
+        echo "$TERMUX_PKG" | while read -r p; do [ -n "$p" ] && log_output "${Y}  $p${N}"; done
+        ((SUSPICIOUS_COUNT+=2)); FOUND_TX=1
+    fi
+
+    TERMUX_PROC=$(adb shell "ps -A 2>/dev/null | grep -iE 'com.termux|bash|sh ' | grep -v 'adb'" | tr -d '\r')
+    if [ -n "$(echo "$TERMUX_PROC" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] PROCESO DE TERMINAL ACTIVO (evasion via script):${N}"
+        echo "$TERMUX_PROC" | head -5 | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
+        ((SUSPICIOUS_COUNT+=2)); FOUND_TX=1
+    fi
+
+    [ $FOUND_TX -eq 0 ] && log_output "${G}[✓] Sin Termux ni shells externos${N}"
+    echo ""
+}
+
+check_xiaomi_paths() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     BYPASS XIAOMI / MIUI / HYPEROS                    ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_MI=0
+
+    BRAND=$(adb shell "getprop ro.product.brand 2>/dev/null" | tr -d '\r' | tr '[:upper:]' '[:lower:]')
+    if echo "$BRAND" | grep -qiE "xiaomi|redmi|poco"; then
+        log_output "${B}[*] Dispositivo Xiaomi/Redmi/POCO — verificando paths especificos...${N}"
+
+        MI_ROOT_PATHS=$(adb shell "ls /data/miui 2>/dev/null; ls /data/system/miui* 2>/dev/null;             getprop ro.miui.ui.version.name 2>/dev/null; getprop ro.build.hyperos.version 2>/dev/null" | tr -d '\r')
+
+        MI_SU=$(adb shell "find /system/xbin /system/bin 2>/dev/null -name 'su*' | head -5" | tr -d '\r')
+        if [ -n "$(echo "$MI_SU" | tr -d '[:space:]')" ]; then
+            log_output "${R}[!] Binario su en paths MIUI:${N}"
+            echo "$MI_SU" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
+            ((SUSPICIOUS_COUNT+=2)); FOUND_MI=1
+        fi
+
+        MI_BYPASS=$(adb shell "getprop ro.miui.disable_dm_verity 2>/dev/null;             getprop persist.miui.disable_dm_verity 2>/dev/null" | tr -d '\r' | grep -v '^$')
+        if [ -n "$MI_BYPASS" ]; then
+            log_output "${Y}[!] DM-Verity modificado en MIUI: $MI_BYPASS${N}"
+            ((SUSPICIOUS_COUNT++)); FOUND_MI=1
+        fi
+
+        [ $FOUND_MI -eq 0 ] && log_output "${G}[✓] Sin indicadores de bypass Xiaomi${N}"
+    else
+        log_output "${G}[✓] No es dispositivo Xiaomi — omitido${N}"
+    fi
+    echo ""
+}
+
+check_active_dns() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     RESOLUCIÓN DNS ACTIVA (detección de intercepcion)  ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_DNS=0
+
+    for DNS_SERVER in "1.1.1.1" "8.8.8.8" "9.9.9.9"; do
+        RESULT=$(adb shell "nslookup google.com $DNS_SERVER 2>/dev/null | grep -iE 'address|server'" | tr -d '\r' | head -3)
+        if [ -z "$(echo "$RESULT" | tr -d '[:space:]')" ]; then
+            log_output "${Y}[!] Respuesta vacía de $DNS_SERVER — posible intercepcion DNS${N}"
+            ((SUSPICIOUS_COUNT++)); FOUND_DNS=1
+        else
+            RESOLVED=$(echo "$RESULT" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | tail -1)
+            if [ -n "$RESOLVED" ]; then
+                log_output "${G}[✓] DNS $DNS_SERVER resuelve a: $RESOLVED${N}"
+            fi
+        fi
+    done
+
+    DNS_INTERCEPT=$(adb shell "getprop net.dns1 2>/dev/null; getprop net.dns2 2>/dev/null" | tr -d '\r' | grep -vE '^(8\.8|1\.1|9\.9|192\.168|10\.|172\.|$)')
+    if [ -n "$DNS_INTERCEPT" ]; then
+        log_output "${Y}[!] DNS no convencional configurado: $DNS_INTERCEPT${N}"
+        ((SUSPICIOUS_COUNT++)); FOUND_DNS=1
+    fi
+
+    [ $FOUND_DNS -eq 0 ] && log_output "${G}[✓] DNS funcionando correctamente${N}"
+    echo ""
+}
+
+check_active_protocols() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     PUERTOS SOSPECHOSOS (SSH/FTP/IMAP/SOCKS)           ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_PROTO=0
+
+    TCP_CONNS=$(adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '{print \$3}' | grep -v 'rem_address' | sort -u" | tr -d '\r')
+
+    declare -A PROTO_PORTS
+    PROTO_PORTS=(
+        ["SSH"]="0016"
+        ["FTP"]="0015"
+        ["SMTP"]="0019"
+        ["IMAP"]="008F"
+        ["IMAP-SSL"]="03E1"
+        ["POP3"]="006E"
+        ["POP3-SSL"]="03E3"
+        ["SOCKS"]="0438"
+        ["PROXY-8080"]="1F90"
+        ["PROXY-8888"]="22B8"
+    )
+
+    for proto in "${!PROTO_PORTS[@]}"; do
+        PORT_HEX="${PROTO_PORTS[$proto]}"
+        if echo "$TCP_CONNS" | grep -iq ":${PORT_HEX}"; then
+            log_output "${R}[!] Conexion $proto activa (puerto sospechoso)${N}"
+            ((SUSPICIOUS_COUNT+=2)); FOUND_PROTO=1
+        fi
+    done
+
+    SOCKS5=$(adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '{print \$3}' | grep -i ':0438'" | tr -d '\r')
+    if [ -n "$(echo "$SOCKS5" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] SOCKS5 proxy activo en puerto 1080${N}"
+        ((SUSPICIOUS_COUNT+=2)); FOUND_PROTO=1
+    fi
+
+    [ $FOUND_PROTO -eq 0 ] && log_output "${G}[✓] Sin puertos de protocolo sospechoso${N}"
     echo ""
 }
 
