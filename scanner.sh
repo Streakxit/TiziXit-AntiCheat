@@ -55,7 +55,7 @@ verificar_hwid_ban() {
     respuesta=$(curl -sf --max-time 6 \
         "${BACKEND_URL}/api/ban/check?hwid=${DEVICE_HWID}" 2>/dev/null)
 
-    # Sin conexión → dejar pasar
+    # Sin conexión → 
     if [ -z "$respuesta" ]; then
         return 0
     fi
@@ -83,7 +83,7 @@ verificar_hwid_ban() {
         echo -e "${W}  Data   : ${Y}${fecha}${N}"
         echo -e "${W}  HWID   : ${Y}${DEVICE_HWID}${N}"
         echo ""
-        echo -e "${Y}  Este dispositivo NO puede usar el scanner.${N}"
+        echo -e "${Y}  Este dispositivo no puede usar el scanner.${N}"
         echo ""
         echo -e "${W}Presione Enter para salir...${N}"; read
         return 1
@@ -287,38 +287,41 @@ ver_ultimo_log() {
 ejecutar_scan() {
     clear; banner
 
-    # Link clicable OSC 8 (funciona en Termux)
     IG_URL="https://www.instagram.com/tizi_7zz?igsh=MTdndzJyb2hzeDJmZQ=="
-    IG_LINK="\e]8;;${IG_URL}\e\\📸 instagram.com/tizi_7zz\e]8;;\e\\"
+    SEP="${Y}+========================================================+${N}"
+    DIV="${Y}+--------------------------------------------------------+${N}"
 
-    echo -e "${Y}╔════════════════════════════════════════════════════════╗${N}"
-    echo -e "${Y}║${R}        ⚠  ATENCIÓN — LEER ANTES DE CONTINUAR  ⚠       ${Y}║${N}"
-    echo -e "${Y}╠════════════════════════════════════════════════════════╣${N}"
-    echo -e "${Y}║${N}                                                        ${Y}║${N}"
-    echo -e "${Y}║${W}  Garena realizó una actualización que afectó el        ${Y}║${N}"
-    echo -e "${Y}║${W}  sistema de replays, lo que puede generar FALSOS       ${Y}║${N}"
-    echo -e "${Y}║${W}  POSITIVOS en el módulo de análisis de replays.        ${Y}║${N}"
-    echo -e "${Y}║${N}                                                        ${Y}║${N}"
-    echo -e "${Y}║${W}  Ya se incorporó un sistema de aviso para estos casos. ${Y}║${N}"
-    echo -e "${Y}║${N}                                                        ${Y}║${N}"
-    echo -e "${Y}╠════════════════════════════════════════════════════════╣${N}"
-    echo -e "${Y}║${C}  ► Para los SS que analizan:${N}                      ${Y}║${N}"
-    echo -e "${Y}║${W}    · Usen herramientas como Logcat, Brevent, etc.     ${Y}║${N}"
-    echo -e "${Y}║${W}    · NO apliquen W.O únicamente por el scanner.       ${Y}║${N}"
-    echo -e "${Y}║${W}    · El scanner puede cometer falsos positivos.        ${Y}║${N}"
-    echo -e "${Y}║${W}    · Ante la duda, analicen manualmente.              ${Y}║${N}"
-    echo -e "${Y}║${N}                                                        ${Y}║${N}"
-    echo -e "${Y}║${C}  ► ¿No sabés cómo revisar? Sin problema:${N}              ${Y}║${N}"
-    echo -e "${Y}║${W}    Mandame captura a mi Instagram y te ayudo.         ${Y}║${N}"
-    echo -e "${Y}║${W}    Mantengamos un ambiente limpio juntos.             ${Y}║${N}"
-    echo -e "${Y}║${N}                                                        ${Y}║${N}"
-    echo -e "${Y}║  ${M}${IG_LINK}${N}                          ${Y}║${N}"
-    echo -e "${Y}║${N}                                                        ${Y}║${N}"
-    echo -e "${Y}╠════════════════════════════════════════════════════════╣${N}"
-    echo -e "${Y}║${M}         Gracias por leer — TIZI · UNKNOWN TEAM          ${Y}║${N}"
-    echo -e "${Y}╚════════════════════════════════════════════════════════╝${N}"
+    echo -e "$SEP"
+    echo -e "${Y}|${R}     ⚠   ATENCION  --  LEER ANTES DE CONTINUAR   ⚠     ${Y}|${N}"
+    echo -e "$SEP"
+    echo -e "${Y}|${N}"
+    echo -e "${Y}|${W}  Garena hizo una actualizacion que rompio el sistema${N}"
+    echo -e "${Y}|${W}  de deteccion de replays. El scanner puede generar${N}"
+    echo -e "${Y}|${W}  FALSOS POSITIVOS en el modulo de replays.${N}"
+    echo -e "${Y}|${N}"
+    echo -e "${Y}|${W}  Ya se incorporo un sistema de aviso para estos casos.${N}"
+    echo -e "${Y}|${N}"
+    echo -e "$DIV"
+    echo -e "${Y}|${C}  Para los SS que analizan:${N}"
+    echo -e "${Y}|${W}    * Usen herramientas como Logcat, Brevent, etc.${N}"
+    echo -e "${Y}|${W}    * NO apliquen W.O unicamente por el scanner.${N}"
+    echo -e "${Y}|${W}    * El scanner puede cometer falsos positivos.${N}"
+    echo -e "${Y}|${W}    * Ante la duda, analicen SIEMPRE manualmente.${N}"
+    echo -e "${Y}|${N}"
+    echo -e "$DIV"
+    echo -e "${Y}|${C}  No sabes como revisar? Sin problema:${N}"
+    echo -e "${Y}|${W}  Mandame captura a Instagram y te ayudo gratis.${N}"
+    echo -e "${Y}|${W}  Mantengamos un ambiente limpio juntos. ${N}"
+    echo -e "${Y}|${N}"
+    echo -e "${Y}|${M}  📸 Instagram:${N}"
+    printf "  [1;33m|[0m  [1;35m]8;;%s\instagram.com/tizi_7zz  <-- TOCAR AQUI]8;;\\[0m
+" "$IG_URL"
+    echo -e "${Y}|${N}"
+    echo -e "$SEP"
+    echo -e "${Y}|${M}       Gracias por leer -- TIZI  *  UNKNOWN TEAM${N}"
+    echo -e "$SEP"
     echo ""
-    echo -ne "${W}  Presioná ${G}[ENTER]${W} para iniciar el análisis... ${N}"; read
+    echo -ne "${W}  Presiona ${G}[ENTER]${W} para iniciar el analisis... ${N}"; read
 
     clear; banner
     log_output "${B}[*] Escaneando: $GAME_SELECTED${N}\n"
