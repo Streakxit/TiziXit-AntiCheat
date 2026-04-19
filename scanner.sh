@@ -386,6 +386,8 @@ ejecutar_scan() {
     check_xiaomi_paths
     check_active_dns
     check_active_protocols
+    check_logcat_delta
+    check_process_delta
     show_summary
 
     echo -e "\n${W}Presiona Enter para volver al menú...${N}"; read
@@ -407,8 +409,10 @@ prefetch_device_data() {
 
     PKG_CACHE=$(cat "$T/pkg.txt" 2>/dev/null | tr -d '\r')
     PS_CACHE=$(cat "$T/ps.txt"  2>/dev/null | tr -d '\r')
+    PS_SNAPSHOT_INICIO="$PS_CACHE"
     PROP_CACHE=$(cat "$T/prop.txt" 2>/dev/null | tr -d '\r')
     LOG_CACHE=$(cat "$T/log.txt"  2>/dev/null | tr -d '\r')
+    LOG_LAST_LINE=$(echo "$LOG_CACHE" | tail -1)
     TCP_CACHE=$(cat "$T/tcp.txt"  2>/dev/null | tr -d '\r')
     MNT_CACHE=$(cat "$T/mnt.txt"  2>/dev/null | tr -d '\r')
     rm -rf "$T"
@@ -792,6 +796,29 @@ check_replays() {
         [ "$PM" != "$PC" ] && [ -n "$PM" ] && MOTIVOS+=("Motivo 11 - Modify ≠ Change en carpeta MReplays")
     fi
 
+
+    if [ -n "$ARCHIVO_MAS_RECIENTE" ]; then
+        log_output "${B}[+] Segunda pasada — verificando estabilidad de timestamps...${N}"
+        STAT_PASADA1=$(adb shell "stat '$ARCHIVO_MAS_RECIENTE' 2>/dev/null" | tr -d '\r')
+        sleep 3
+        STAT_PASADA2=$(adb shell "stat '$ARCHIVO_MAS_RECIENTE' 2>/dev/null" | tr -d '\r')
+
+        DM_P1=$(echo "$STAT_PASADA1" | grep "^Modify:" | head -1)
+        DM_P2=$(echo "$STAT_PASADA2" | grep "^Modify:" | head -1)
+        DC_P1=$(echo "$STAT_PASADA1" | grep "^Change:" | head -1)
+        DC_P2=$(echo "$STAT_PASADA2" | grep "^Change:" | head -1)
+
+        if [ "$DM_P1" != "$DM_P2" ] || [ "$DC_P1" != "$DC_P2" ]; then
+            log_output "${R}[!] MANIPULACION EN TIEMPO REAL: timestamps del replay cambiaron entre pasadas${N}"
+            log_output "${Y}    Pasada 1 Modify: $DM_P1${N}"
+            log_output "${Y}    Pasada 2 Modify: $DM_P2${N}"
+            MOTIVOS+=("Motivo 17 - Timestamps mutando durante el scan: manipulacion activa detectada")
+            ((SUSPICIOUS_COUNT+=5))
+        else
+            log_output "${G}[✓] Timestamps estables entre pasadas${N}"
+        fi
+    fi
+
     echo ""
     if [ ${#MOTIVOS[@]} -gt 0 ]; then
         log_output "${Y}[!] ANOMALIAS EN REPLAYS - REVISAR MANUALMENTE - POSIBLE FALSO POSITIVO${N}"
@@ -906,31 +933,46 @@ check_fake_time() {
     log_output "${C}║${W}          DETECCIÓN DE TIEMPO FALSO / CONGELADO         ${C}║${N}"
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
 
-    log_output "${B}[+] Verificando que el tiempo avance normalmente...${N}"
+    log_output "${B}[+] Midiendo progresión del tiempo (3 muestras)...${N}"
     T1=$(adb shell "date +%s 2>/dev/null" | tr -d '\r')
-    sleep 1
+    sleep 2
     T2=$(adb shell "date +%s 2>/dev/null" | tr -d '\r')
-    if [ -n "$T1" ] && [ -n "$T2" ]; then
-        DIFF=$((T2 - T1))
-        if [ "$DIFF" -lt 1 ]; then
-            log_output "${R}[!] TIEMPO CONGELADO O FALSO (T1=$T1 T2=$T2)${N}"
-            ((SUSPICIOUS_COUNT+=3))
-        else
-            log_output "${G}[✓] Tiempo avanza normalmente${N}"
+    sleep 2
+    T3=$(adb shell "date +%s 2>/dev/null" | tr -d '\r')
+
+    if [ -n "$T1" ] && [ -n "$T2" ] && [ -n "$T3" ]; then
+        D1=$((T2 - T1))
+        D2=$((T3 - T2))
+        log_output "${B}[*] Intervalo 1: ${W}${D1}s${N}  |  Intervalo 2: ${W}${D2}s${N}"
+        TIEMPO_OK=1
+        [ "$D1" -lt 1 ] && { log_output "${R}[!] TIEMPO CONGELADO — no avanzó entre muestra 1 y 2${N}"; ((SUSPICIOUS_COUNT+=3)); TIEMPO_OK=0; }
+        [ "$D2" -lt 1 ] && { log_output "${R}[!] TIEMPO CONGELADO — no avanzó entre muestra 2 y 3${N}"; ((SUSPICIOUS_COUNT+=3)); TIEMPO_OK=0; }
+        SALTO=$(( D1 > D2 ? D1 - D2 : D2 - D1 ))
+        if [ "$SALTO" -gt 3 ] && [ $TIEMPO_OK -eq 1 ] 2>/dev/null; then
+            log_output "${R}[!] SALTO DE TIEMPO IRREGULAR: diferencia de ${SALTO}s entre intervalos${N}"
+            ((SUSPICIOUS_COUNT+=2))
+        elif [ $TIEMPO_OK -eq 1 ]; then
+            log_output "${G}[✓] Tiempo avanza normalmente y de forma consistente${N}"
         fi
     fi
 
-    log_output "${B}[+] Verificando inconsistencia via stat...${N}"
+    log_output "${B}[+] Verificando coherencia de timestamps via stat...${N}"
     TEST_FILE="/data/local/tmp/.tc_$$"
     adb shell "echo test > $TEST_FILE 2>/dev/null" >/dev/null 2>&1
     sleep 1
-    STAT_R=$(adb shell "stat $TEST_FILE 2>/dev/null" | tr -d '\r')
+    STAT_R1=$(adb shell "stat $TEST_FILE 2>/dev/null" | tr -d '\r')
+    sleep 2
+    STAT_R2=$(adb shell "stat $TEST_FILE 2>/dev/null" | tr -d '\r')
     adb shell "rm -f $TEST_FILE 2>/dev/null" >/dev/null 2>&1
-    if echo "$STAT_R" | grep -q "1970"; then
-        log_output "${R}[!] INCONSISTENCIA: stat muestra año 1970${N}"
-        ((SUSPICIOUS_COUNT+=2))
+
+    ATIME1=$(echo "$STAT_R1" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1)
+    ATIME2=$(echo "$STAT_R2" | grep "^Access:" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1)
+    if echo "$STAT_R1" | grep -q "1970"; then
+        log_output "${R}[!] INCONSISTENCIA CRÍTICA: stat muestra año 1970${N}"; ((SUSPICIOUS_COUNT+=2))
+    elif [ -n "$ATIME1" ] && [ "$ATIME1" = "$ATIME2" ]; then
+        log_output "${R}[!] ATIME no cambia entre lecturas — posible tiempo congelado${N}"; ((SUSPICIOUS_COUNT+=2))
     else
-        log_output "${G}[✓] Timestamps consistentes${N}"
+        log_output "${G}[✓] Timestamps coherentes entre lecturas${N}"
     fi
     echo ""
 }
@@ -1603,6 +1645,74 @@ check_active_protocols() {
     fi
 
     [ $FOUND_PROTO -eq 0 ] && log_output "${G}[✓] Sin puertos de protocolo sospechoso${N}"
+    echo ""
+}
+
+check_logcat_delta() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     EVENTOS NUEVOS EN LOGCAT DURANTE EL SCAN           ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    log_output "${B}[+] Capturando eventos nuevos desde inicio del scan...${N}"
+    LOG_ACTUAL=$(adb shell "logcat -d -b all 2>/dev/null | tail -n 6000" | tr -d '\r')
+
+    LOG_NUEVO=$(echo "$LOG_ACTUAL" | grep -A 999999 "$LOG_LAST_LINE" 2>/dev/null | tail -n +2)
+    [ -z "$LOG_NUEVO" ] && LOG_NUEVO=$(echo "$LOG_ACTUAL" | tail -n 500)
+
+    FOUND_LOG=0
+
+    INJECT_LOG=$(echo "$LOG_NUEVO" | grep -iE 'inject|hook|frida|xposed|lsposed|bypass|cheat' | grep -viE 'knox|google' | head -5)
+    if [ -n "$INJECT_LOG" ]; then
+        log_output "${R}[!] ACTIVIDAD SOSPECHOSA EN LOG DURANTE EL SCAN:${N}"
+        echo "$INJECT_LOG" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_LOG=1
+    fi
+
+    ROOT_LOG=$(echo "$LOG_NUEVO" | grep -iE 'su: |granted root|superuser|magisk.*allow|access granted' | grep -viE 'knox' | head -3)
+    if [ -n "$ROOT_LOG" ]; then
+        log_output "${R}[!] ACTIVIDAD DE ROOT DURANTE EL SCAN:${N}"
+        echo "$ROOT_LOG" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_LOG=1
+    fi
+
+    CRASH_LOG=$(echo "$LOG_NUEVO" | grep -iE "FATAL|force.clos|native crash" | grep -i "${GAME_PKG}" | head -3)
+    if [ -n "$CRASH_LOG" ]; then
+        log_output "${Y}[!] Crash del juego durante el scan (posible cheat inestable):${N}"
+        echo "$CRASH_LOG" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
+        ((SUSPICIOUS_COUNT++)); FOUND_LOG=1
+    fi
+
+    [ $FOUND_LOG -eq 0 ] && log_output "${G}[✓] Sin eventos sospechosos nuevos en logcat${N}"
+    echo ""
+}
+
+check_process_delta() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     PROCESOS NUEVOS DURANTE EL SCAN (DELTA)            ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    log_output "${B}[+] Comparando procesos inicio vs fin del scan...${N}"
+    PS_SNAPSHOT_FIN=$(adb shell "ps -A 2>/dev/null" | tr -d '\r')
+
+    PIDS_INICIO=$(echo "$PS_SNAPSHOT_INICIO" | awk '{print $2}' | sort)
+    PIDS_FIN=$(echo "$PS_SNAPSHOT_FIN"    | awk '{print $2}' | sort)
+
+    NUEVOS_PIDS=$(comm -13 <(echo "$PIDS_INICIO") <(echo "$PIDS_FIN") 2>/dev/null)
+    FOUND_DELTA=0
+
+    if [ -n "$NUEVOS_PIDS" ]; then
+        while read -r pid; do
+            [ -z "$pid" ] && continue
+            PROC_LINE=$(echo "$PS_SNAPSHOT_FIN" | awk -v p="$pid" '$2==p {print}' | head -1)
+            PROC_NAME=$(echo "$PROC_LINE" | awk '{print $NF}')
+            if echo "$PROC_NAME" | grep -qiE 'frida|hook|inject|cheat|bypass|magisk|xposed|lsposed|shizuku|su$'; then
+                log_output "${R}[!] PROCESO SOSPECHOSO APARECIO DURANTE EL SCAN: $PROC_NAME (PID $pid)${N}"
+                ((SUSPICIOUS_COUNT+=3)); FOUND_DELTA=1
+            fi
+        done <<< "$NUEVOS_PIDS"
+    fi
+
+    [ $FOUND_DELTA -eq 0 ] && log_output "${G}[✓] Sin procesos sospechosos nuevos durante el scan${N}"
     echo ""
 }
 
