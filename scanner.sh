@@ -342,12 +342,12 @@ ejecutar_scan() {
         echo -e "${W}Enter...${N}"; read; main_menu; return
     fi
 
+    prefetch_device_data
+
     if ! echo "$PKG_CACHE" | grep -q "$GAME_PKG"; then
         log_output "${R}[!] $GAME_SELECTED no está instalado${N}"
         sleep 3; main_menu; return
     fi
-
-    prefetch_device_data
     check_device_info
     check_root
     check_uptime
@@ -1634,5 +1634,4 @@ show_summary() {
 
 check_storage
 main_menu
-
 
