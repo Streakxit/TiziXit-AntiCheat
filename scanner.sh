@@ -1,4 +1,4 @@
-
+#!/data/data/com.termux/files/usr/bin/bash
 R='\033[1;31m'
 G='\033[1;32m'
 Y='\033[1;33m'
@@ -28,7 +28,7 @@ registrar_uso() {
     echo "$count" > "$STATS_FILE"
     curl -sf --max-time 4 -X POST "${BACKEND_URL}/api/stats/scan" \
         -H "Content-Type: application/json" \
-        -d '{"version":"1.3.0"}' &>/dev/null &
+        -d '{"version":"1.4.0"}' &>/dev/null &
 }
 
 obtener_stats_global() {
@@ -115,10 +115,10 @@ banner() {
     }
 
     printf "%b\n" "${C}${top}${N}"
-    local _g; _g=$(obtener_stats_global)
     local _l; _l=$(cat "$STATS_FILE" 2>/dev/null || echo "0")
+    local _g; _g=$(curl -sf --max-time 3 "${BACKEND_URL}/api/stats/scan" 2>/dev/null | grep -o '"total":[0-9]*' | grep -o '[0-9]*' || echo "?")
     printf "%b\n" "${C}║${M}$( _center "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM" )${C}║${N}"
-    printf "%b\n" "${C}║${M}$( _center "VERSIÓN 1.3.0" )${C}║${N}"
+    printf "%b\n" "${C}║${M}$( _center "VERSIÓN 1.4.0" )${C}║${N}"
     printf "%b\n" "${C}║${G}$( _center "Scans globales: ${_g}  |  Este dispositivo: ${_l}" )${C}║${N}"
     printf "%b\n" "${C}${bottom}${N}"
     echo ""
@@ -196,7 +196,7 @@ guardar_dumpsys() {
         echo -e "${W}Enter...${N}"; read; main_menu; return
     fi
 
-    DUMP_DIR="$HOME/dump_$(date +%Y%m%d_%H%M%S)"
+    DUMP_DIR="/sdcard/Download/unknown_dump_$(date +%Y%m%d_%H%M%S)"
     mkdir -p "$DUMP_DIR"
     echo -e "${B}[*] Guardando en: ${W}$DUMP_DIR${N}\n"
 
@@ -227,7 +227,7 @@ guardar_dumpsys() {
     echo ""
     DUMP_SIZE=$(du -sh "$DUMP_DIR" 2>/dev/null | cut -f1)
     echo -e "${G}[✓] Guardado: ${W}$DUMP_DIR ${G}($DUMP_SIZE)${N}"
-    echo -e "${Y}[*] Comprimir: tar czf dump.tar.gz -C \$HOME $(basename $DUMP_DIR)${N}"
+    echo -e "${Y}[*] Guardado en Descargas: $(basename $DUMP_DIR)${N}"
     echo ""
     echo -e "${W}Enter para volver...${N}"; read; main_menu
 }
@@ -342,11 +342,12 @@ ejecutar_scan() {
         echo -e "${W}Enter...${N}"; read; main_menu; return
     fi
 
-    if ! adb shell pm list packages | grep -q "$GAME_PKG"; then
+    if ! echo "$PKG_CACHE" | grep -q "$GAME_PKG"; then
         log_output "${R}[!] $GAME_SELECTED no está instalado${N}"
         sleep 3; main_menu; return
     fi
 
+    prefetch_device_data
     check_device_info
     check_root
     check_uptime
@@ -389,6 +390,30 @@ ejecutar_scan() {
 
     echo -e "\n${W}Presiona Enter para volver al menú...${N}"; read
     main_menu
+}
+
+prefetch_device_data() {
+    echo -e "${B}[*] Recopilando datos del dispositivo...${N}"
+    local T="$HOME/.usk_cache_$$"
+    mkdir -p "$T"
+
+    adb shell "pm list packages 2>/dev/null"                              > "$T/pkg.txt" &
+    adb shell "ps -A 2>/dev/null"                                         > "$T/ps.txt"  &
+    adb shell "getprop 2>/dev/null"                                       > "$T/prop.txt" &
+    adb shell "logcat -d -b all 2>/dev/null | tail -n 4000"              > "$T/log.txt"  &
+    adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null"             > "$T/tcp.txt"  &
+    adb shell "cat /proc/mounts 2>/dev/null"                             > "$T/mnt.txt"  &
+    wait
+
+    PKG_CACHE=$(cat "$T/pkg.txt" 2>/dev/null | tr -d '\r')
+    PS_CACHE=$(cat "$T/ps.txt"  2>/dev/null | tr -d '\r')
+    PROP_CACHE=$(cat "$T/prop.txt" 2>/dev/null | tr -d '\r')
+    LOG_CACHE=$(cat "$T/log.txt"  2>/dev/null | tr -d '\r')
+    TCP_CACHE=$(cat "$T/tcp.txt"  2>/dev/null | tr -d '\r')
+    MNT_CACHE=$(cat "$T/mnt.txt"  2>/dev/null | tr -d '\r')
+    rm -rf "$T"
+    echo -e "${G}[✓] Datos recopilados${N}
+"
 }
 
 check_device_info() {
@@ -496,13 +521,13 @@ detect_shell_bypass() {
 
 check_system_logs() {
     log_output "${B}[+] Verificando logs del sistema...${N}"
-    FIRST_LOG=$(adb logcat -d -v time 2>/dev/null | grep -oE "[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}" | head -1)
+    FIRST_LOG=$(echo "$LOG_CACHE" | grep -oE "[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}" | head -1)
     log_output "${Y}[*] Primer registro de log: $FIRST_LOG${N}\n"
 }
 
 check_time_changes() {
     log_output "${B}[+] Verificando cambios de hora...${N}"
-    TIME_CHANGES=$(adb logcat -d 2>/dev/null | grep "Time changed" | grep -v "HCALL" | tail -3)
+    TIME_CHANGES=$(echo "$LOG_CACHE" | grep "Time changed" | grep -v "HCALL" | tail -3)
     if [ -n "$TIME_CHANGES" ]; then
         log_output "${R}[!] CAMBIOS DE HORA DETECTADOS${N}"
         echo "$TIME_CHANGES" | while read -r line; do log_output "${Y}  $line${N}"; done
@@ -515,7 +540,7 @@ check_time_changes() {
 
 check_clipboard() {
     log_output "${B}[+] Verificando uso de clipboard por Free Fire...${N}"
-    CLIP=$(adb logcat -d 2>/dev/null | grep 'hcallSetClipboardTextRpc' | tail -5)
+    CLIP=$(echo "$LOG_CACHE" | grep 'hcallSetClipboardTextRpc' | tail -5)
     if [ -n "$CLIP" ]; then
         log_output "${Y}[!] Free Fire copió texto al portapapeles (posible cheat que copia datos del juego)${N}"
         echo "$CLIP" | while read -r line; do log_output "${W}  $line${N}"; done
@@ -567,7 +592,7 @@ check_vpn_dns() {
     )
     VPN_DETECTED=0
     for pkg in "${VPN_PACKAGES[@]}"; do
-        if adb shell pm list packages 2>/dev/null | grep -q "$pkg"; then
+        if echo "$PKG_CACHE" | grep -q "package:$pkg"; then
             log_output "${R}[!] VPN INSTALADA: $pkg${N}"
             VPN_DETECTED=1; ((SUSPICIOUS_COUNT++))
         fi
@@ -814,7 +839,7 @@ check_hooks() {
     FOUND_HOOK=0
 
     log_output "${B}[+] Verificando procesos de hooking...${N}"
-    HOOK_PROC=$(adb shell "ps -A 2>/dev/null | grep -iE 'frida|xposed|lsposed|lspatch|zygisk|riru|shizuku|inject'" | tr -d '\r')
+    HOOK_PROC=$(echo "$PS_CACHE" | grep -iE 'frida|xposed|lsposed|lspatch|zygisk|riru|shizuku|inject')
     if [ -n "$HOOK_PROC" ]; then
         log_output "${R}[!] PROCESO DE HOOKING ACTIVO:${N}"
         echo "$HOOK_PROC" | while read -r line; do log_output "${Y}  $line${N}"; done
@@ -830,7 +855,7 @@ check_hooks() {
     fi
 
     log_output "${B}[+] Verificando LSPatch / LSPosed crackeado / wrapper...${N}"
-    PKG_HOOK=$(adb shell "pm list packages 2>/dev/null | grep -iE 'lspatch|lsposed|crackedlsposed|lsposedwrapper'" | tr -d '\r')
+    PKG_HOOK=$(echo "$PKG_CACHE" | grep -iE 'lspatch|lsposed|crackedlsposed|lsposedwrapper')
     if [ -n "$PKG_HOOK" ]; then
         log_output "${R}[!] PAQUETE DE HOOKING INSTALADO:${N}"
         echo "$PKG_HOOK" | while read -r p; do [ -n "$p" ] && log_output "${Y}  $p${N}"; done
@@ -838,8 +863,8 @@ check_hooks() {
     fi
 
     log_output "${B}[+] Verificando Shizuku (escalada de privilegios)...${N}"
-    SHIZUKU=$(adb shell "pm list packages 2>/dev/null | grep -i 'shizuku'" | tr -d '\r')
-    SHIZUKU_SVC=$(adb shell "ps -A 2>/dev/null | grep -i 'shizuku'" | tr -d '\r')
+    SHIZUKU=$(echo "$PKG_CACHE" | grep -i 'shizuku')
+    SHIZUKU_SVC=$(echo "$PS_CACHE" | grep -i 'shizuku')
     if [ -n "$SHIZUKU" ] || [ -n "$SHIZUKU_SVC" ]; then
         log_output "${R}[!] SHIZUKU DETECTADO (escalada de privilegios sin root):${N}"
         [ -n "$SHIZUKU" ] && log_output "${Y}  Package: $SHIZUKU${N}"
@@ -859,7 +884,7 @@ check_root_bypass() {
     log_output "${B}[+] Verificando Magisk, Shamiko, Zygisk...${N}"
     BYPASS_FOUND=0
 
-    BYPASS_PS=$(adb shell "ps -A 2>/dev/null | grep -iE 'magisk|shamiko|zygisk|busybox'" | grep -viE 'knox' | tr -d '\r')
+    BYPASS_PS=$(echo "$PS_CACHE" | grep -iE 'magisk|shamiko|zygisk|busybox' | grep -viE 'knox')
     if [ -n "$BYPASS_PS" ]; then
         log_output "${R}[!] ROOT BYPASS DETECTADO (proceso)${N}"
         echo "$BYPASS_PS" | while read -r line; do log_output "${Y}  $line${N}"; done
@@ -918,22 +943,21 @@ check_tooling() {
     log_output "${B}[+] Verificando emuladores y herramientas sospechosas...${N}"
     TOOL_FOUND=0
 
-    EMULATOR_PROPS=$(adb shell "getprop 2>/dev/null | grep -iE 'qemu|goldfish|vbox|genymotion|nox|memu|bluestacks|andy|droid4x'" \
-        | grep -viE 'knox|samsung|\]: \[0\]|\]: \[\]' | tr -d '\r')
+    EMULATOR_PROPS=$(echo "$PROP_CACHE" | grep -iE 'qemu|goldfish|vbox|genymotion|nox|memu|bluestacks|andy|droid4x' | grep -viE 'knox|samsung|\]: \[0\]|\]: \[\]')
     if [ -n "$EMULATOR_PROPS" ]; then
         log_output "${R}[!] EMULADOR DETECTADO${N}"
         echo "$EMULATOR_PROPS" | while read -r line; do log_output "${Y}  $line${N}"; done
         ((SUSPICIOUS_COUNT+=2)); TOOL_FOUND=1
     fi
 
-    QEMU_PROC=$(adb shell "ps -A 2>/dev/null | grep -iE 'qemu|genymotion|bluestacks'" | grep -viE 'knox' | tr -d '\r')
+    QEMU_PROC=$(echo "$PS_CACHE" | grep -iE 'qemu|genymotion|bluestacks' | grep -viE 'knox')
     if [ -n "$QEMU_PROC" ]; then
         log_output "${R}[!] PROCESO DE EMULADOR DETECTADO${N}"
         echo "$QEMU_PROC" | while read -r line; do log_output "${Y}  $line${N}"; done
         ((SUSPICIOUS_COUNT+=2)); TOOL_FOUND=1
     fi
 
-    QEMU_FLAG=$(adb shell "getprop ro.kernel.qemu 2>/dev/null" | tr -d '\r')
+    QEMU_FLAG=$(echo "$PROP_CACHE" | grep "ro.kernel.qemu" | grep -oE "\[.*\]$" | tr -d "[]")
     if [ "$QEMU_FLAG" = "1" ]; then
         log_output "${R}[!] EMULADOR CONFIRMADO (ro.kernel.qemu=1)${N}"
         ((SUSPICIOUS_COUNT+=3)); TOOL_FOUND=1
@@ -961,10 +985,10 @@ check_boot_state() {
     log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
     log_output "${C}║${W}         ESTADO DE BOOT VERIFICADO                     ${C}║${N}"
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
-    BOOT_STATE=$(adb shell "getprop ro.boot.verifiedbootstate 2>/dev/null" | tr -d '\r')
-    FLASH_LOCKED=$(adb shell "getprop ro.boot.flash.locked 2>/dev/null" | tr -d '\r')
-    VBMETA=$(adb shell "getprop ro.boot.vbmeta.device_state 2>/dev/null" | tr -d '\r')
-    WARRANTY=$(adb shell "getprop ro.boot.warranty_bit 2>/dev/null" | tr -d '\r')
+    BOOT_STATE=$(echo "$PROP_CACHE" | grep '"ro.boot.verifiedbootstate"' | grep -oE '\[.*\]$' | tr -d '[]')
+    FLASH_LOCKED=$(echo "$PROP_CACHE" | grep '"ro.boot.flash.locked"' | grep -oE '\[.*\]$' | tr -d '[]')
+    VBMETA=$(echo "$PROP_CACHE" | grep '"ro.boot.vbmeta.device_state"' | grep -oE '\[.*\]$' | tr -d '[]')
+    WARRANTY=$(echo "$PROP_CACHE" | grep '"ro.boot.warranty_bit"' | grep -oE '\[.*\]$' | tr -d '[]')
     log_output "${B}[*] verifiedbootstate:  ${W}${BOOT_STATE:-desconocido}${N}"
     log_output "${B}[*] flash.locked:       ${W}${FLASH_LOCKED:-desconocido}${N}"
     log_output "${B}[*] vbmeta.device_state:${W}${VBMETA:-desconocido}${N}"
@@ -981,7 +1005,7 @@ check_boot_state() {
     if [ "$WARRANTY" = "1" ]; then
         log_output "${Y}[!] warranty_bit=1 — bootloader desbloqueado anteriormente${N}"; ((SUSPICIOUS_COUNT++))
     fi
-    BUILD_TAGS=$(adb shell "getprop ro.build.tags 2>/dev/null" | tr -d '\r')
+    BUILD_TAGS=$(echo "$PROP_CACHE" | grep '"ro.build.tags"' | grep -oE '\[.*\]$' | tr -d '[]')
     if echo "$BUILD_TAGS" | grep -qiE "test-keys|dev-keys"; then
         log_output "${R}[!] Build tags sospechosas: $BUILD_TAGS${N}"; ((SUSPICIOUS_COUNT+=2))
     else
@@ -994,9 +1018,9 @@ check_kernel() {
     log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
     log_output "${C}║${W}         ANÁLISIS DE KERNEL                            ${C}║${N}"
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
-    KERNEL=$(adb shell "uname -r 2>/dev/null" | tr -d '\r')
+    KERNEL=$(adb shell 'uname -r 2>/dev/null' | tr -d '\r')
     log_output "${B}[*] Kernel: ${W}$KERNEL${N}"
-    KSU_LOG=$(adb shell 'logcat -b kernel -d 2>/dev/null | grep -iE "kernelsu|magisk|apatch" | head -1' | tr -d '\r')
+    KSU_LOG=$(echo "$LOG_CACHE" | grep -iE "kernelsu|magisk|apatch" | head -1)
     if [ -n "$KSU_LOG" ]; then
         log_output "${R}[!] KernelSU/Magisk/APatch en kernel log:${N}"
         log_output "${Y}  $KSU_LOG${N}"; ((SUSPICIOUS_COUNT+=3))
@@ -1022,7 +1046,7 @@ check_kernel() {
         log_output "${R}[!] Kernel custom con soporte root: $CUSTOM_KERNELS${N}"; ((SUSPICIOUS_COUNT+=2))
     fi
 
-    KSUNEXT_PROP=$(adb shell "getprop 2>/dev/null | grep -im1 'ksunext\|com\.rifsxd'" | tr -d '\r')
+    KSUNEXT_PROP=$(echo "$PROP_CACHE" | grep -im1 'ksunext\|com\.rifsxd')
     if [ -n "$KSUNEXT_PROP" ]; then
         log_output "${R}[!] KernelSU Next detectado en props: $KSUNEXT_PROP${N}"; ((SUSPICIOUS_COUNT+=3))
     fi
@@ -1061,7 +1085,7 @@ check_suspicious_packages() {
         ["com.zhenxi.hunter"]="Shizuku Hunter"
         ["com.system.update.service"]="Servicio falso del sistema"
     )
-    PKG_LIST=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    PKG_LIST="$PKG_CACHE"
     FOUND_SUSP=0
     for pkg in "${!SUSP_APPS[@]}"; do
         if echo "$PKG_LIST" | grep -q "package:$pkg"; then
@@ -1086,7 +1110,7 @@ check_network_ports() {
     log_output "${C}║${W}     PUERTOS Y CONEXIONES SOSPECHOSAS                  ${C}║${N}"
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     log_output "${B}[+] Verificando puertos Frida (27042/27043)...${N}"
-    FRIDA_PORT=$(adb shell "for f in /proc/net/tcp /proc/net/tcp6; do [ -r \"\$f\" ] || continue; grep -iE ':(69B2|69B3) ' \"\$f\" | grep -E ' 0A ' && echo \"\$f\"; done | head -3" | tr -d '\r')
+    FRIDA_PORT=$(echo "$TCP_CACHE" | grep -iE ':(69B2|69B3) ' | grep -E ' 0A ' | head -3)
     if [ -n "$(echo "$FRIDA_PORT" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] PUERTOS FRIDA EN LISTEN:${N}"
         echo "$FRIDA_PORT" | while read -r line; do [ -n "$line" ] && log_output "${Y}  $line${N}"; done
@@ -1117,7 +1141,7 @@ check_adb_connections() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     USB_STATE=$(adb shell "getprop sys.usb.state 2>/dev/null" | tr -d '\r')
     log_output "${B}[*] USB state: ${W}${USB_STATE:-desconocido}${N}"
-    ADB_READ_FAIL=$(adb shell "logcat -d -b system 2>/dev/null | grep -c 'AdbDebuggingManager.*Read failed'" | tr -d '\r')
+    ADB_READ_FAIL=$(echo "$LOG_CACHE" | grep -c "AdbDebuggingManager.*Read failed" 2>/dev/null || echo 0)
     if [ "${ADB_READ_FAIL:-0}" -gt 2 ] 2>/dev/null; then
         log_output "${R}[!] AdbDebuggingManager: $ADB_READ_FAIL fallos — PC desconectado rápidamente${N}"; ((SUSPICIOUS_COUNT++))
     fi
@@ -1198,7 +1222,7 @@ check_dropbox_crashes() {
     else
         log_output "${G}[✓] Sin crashes repetidos${N}"
     fi
-    PHANTOM=$(adb shell "logcat -d -b system 2>/dev/null | grep 'PhantomProcessRecord' | tail -3" | tr -d '\r')
+    PHANTOM=$(echo "$LOG_CACHE" | grep "PhantomProcessRecord" | tail -3)
     if [ -n "$PHANTOM" ]; then
         log_output "${Y}[!] PhantomProcessRecord (procesos matados):${N}"
         echo "$PHANTOM" | while read -r line; do log_output "${Y}  $line${N}"; done
@@ -1230,7 +1254,7 @@ check_pif() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     FOUND_PIF=0
 
-    PKG_LIST_PIF=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    PKG_LIST_PIF="$PKG_CACHE"
     for pkg in "es.chiteroman.playintegrityfix" "com.chiteroman.playintegrityfix" "io.github.vvb2060.playintegrityfix"; do
         if echo "$PKG_LIST_PIF" | grep -q "$pkg"; then
             log_output "${R}[!] Play Integrity Fix instalado: $pkg${N}"; ((SUSPICIOUS_COUNT+=3)); FOUND_PIF=1
@@ -1286,7 +1310,7 @@ check_device_spoof() {
         ((SUSPICIOUS_COUNT+=3)); FOUND_SPOOF=1
     fi
 
-    PKG_LIST_SP=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    PKG_LIST_SP="$PKG_CACHE"
     for pkg in "com.metatech.deviceidfaker" "com.deviceid.changer" "com.xposed.imei" "com.imei.generator" "com.devicechanger.free"; do
         if echo "$PKG_LIST_SP" | grep -q "$pkg"; then
             log_output "${R}[!] App de spoof de ID: $pkg${N}"; ((SUSPICIOUS_COUNT+=3)); FOUND_SPOOF=1
@@ -1354,7 +1378,7 @@ check_mantis_keymap() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     FOUND_KM=0
 
-    PKG_LIST_KM=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    PKG_LIST_KM="$PKG_CACHE"
     declare -A KM_APPS
     KM_APPS=(
         ["com.mantis.gamepad"]="Mantis Gamepad"
@@ -1387,7 +1411,7 @@ check_recording() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     FOUND_REC=0
 
-    PKG_LIST_REC=$(adb shell "pm list packages 2>/dev/null" | tr -d '\r')
+    PKG_LIST_REC="$PKG_CACHE"
     declare -A MIRROR_APPS
     MIRROR_APPS=(
         ["com.koushikdutta.vysor"]="Vysor"
@@ -1406,7 +1430,7 @@ check_recording() {
         log_output "${R}[!] CAPTURA DE PANTALLA ACTIVA${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_REC=1
     fi
 
-    SCRCPY_PROC=$(adb shell "ps -A 2>/dev/null | grep -i scrcpy" | tr -d '\r')
+    SCRCPY_PROC=$(echo "$PS_CACHE" | grep -i scrcpy)
     if [ -n "$SCRCPY_PROC" ]; then
         log_output "${R}[!] Proceso scrcpy activo${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_REC=1
     fi
@@ -1462,18 +1486,12 @@ check_termux_on_device() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     FOUND_TX=0
 
-    TERMUX_PKG=$(adb shell "pm list packages 2>/dev/null | grep -iE 'com.termux|termux'" | tr -d '\r')
+    TERMUX_PKG=$(echo "$PKG_CACHE" | grep -iE "com.termux|termux")
     if [ -n "$TERMUX_PKG" ]; then
-        log_output "${R}[!] TERMUX INSTALADO EN DISPOSITIVO ESCANEADO:${N}"
+        log_output "${Y}[!] Termux instalado en dispositivo escaneado (informativo):${N}"
         echo "$TERMUX_PKG" | while read -r p; do [ -n "$p" ] && log_output "${Y}  $p${N}"; done
-        ((SUSPICIOUS_COUNT+=2)); FOUND_TX=1
-    fi
-
-    TERMUX_PROC=$(adb shell "ps -A 2>/dev/null | grep -iE 'com.termux|bash|sh ' | grep -v 'adb'" | tr -d '\r')
-    if [ -n "$(echo "$TERMUX_PROC" | tr -d '[:space:]')" ]; then
-        log_output "${R}[!] PROCESO DE TERMINAL ACTIVO (evasion via script):${N}"
-        echo "$TERMUX_PROC" | head -5 | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
-        ((SUSPICIOUS_COUNT+=2)); FOUND_TX=1
+        log_output "${B}[*] Nota: puede usarse para scripts de bypass${N}"
+        ((SUSPICIOUS_COUNT+=1)); FOUND_TX=1
     fi
 
     [ $FOUND_TX -eq 0 ] && log_output "${G}[✓] Sin Termux ni shells externos${N}"
@@ -1514,30 +1532,37 @@ check_xiaomi_paths() {
 
 check_active_dns() {
     log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}     RESOLUCIÓN DNS ACTIVA (detección de intercepcion)  ${C}║${N}"
+    log_output "${C}║${W}     ANÁLISIS DNS / INTERCEPCIÓN DE RED                 ${C}║${N}"
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     FOUND_DNS=0
 
-    for DNS_SERVER in "1.1.1.1" "8.8.8.8" "9.9.9.9"; do
-        RESULT=$(adb shell "nslookup google.com $DNS_SERVER 2>/dev/null | grep -iE 'address|server'" | tr -d '\r' | head -3)
-        if [ -z "$(echo "$RESULT" | tr -d '[:space:]')" ]; then
-            log_output "${Y}[!] Respuesta vacía de $DNS_SERVER — posible intercepcion DNS${N}"
-            ((SUSPICIOUS_COUNT++)); FOUND_DNS=1
-        else
-            RESOLVED=$(echo "$RESULT" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | tail -1)
-            if [ -n "$RESOLVED" ]; then
-                log_output "${G}[✓] DNS $DNS_SERVER resuelve a: $RESOLVED${N}"
-            fi
+    DNS1=$(echo "$PROP_CACHE" | grep '"net.dns1"' | grep -oE '\[.*\]$' | tr -d '[]' | head -1)
+    DNS2=$(echo "$PROP_CACHE" | grep '"net.dns2"' | grep -oE '\[.*\]$' | tr -d '[]' | head -1)
+    [ -z "$DNS1" ] && DNS1=$(adb shell "getprop net.dns1 2>/dev/null" | tr -d '\r')
+    [ -z "$DNS2" ] && DNS2=$(adb shell "getprop net.dns2 2>/dev/null" | tr -d '\r')
+    log_output "${B}[*] DNS primario:   ${W}${DNS1:-no configurado}${N}"
+    log_output "${B}[*] DNS secundario: ${W}${DNS2:-no configurado}${N}"
+
+    KNOWN_DNS="^(8\.8\.|8\.4\.|1\.1\.|1\.0\.|9\.9\.9|149\.112|208\.67|185\.228|94\.140|192\.168|10\.|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.|127\.|$)"
+    for DNS_VAL in "$DNS1" "$DNS2"; do
+        [ -z "$DNS_VAL" ] && continue
+        if ! echo "$DNS_VAL" | grep -qE "$KNOWN_DNS"; then
+            log_output "${R}[!] DNS sospechoso (posible intercepción): $DNS_VAL${N}"
+            ((SUSPICIOUS_COUNT+=2)); FOUND_DNS=1
         fi
     done
 
-    DNS_INTERCEPT=$(adb shell "getprop net.dns1 2>/dev/null; getprop net.dns2 2>/dev/null" | tr -d '\r' | grep -vE '^(8\.8|1\.1|9\.9|192\.168|10\.|172\.|$)')
-    if [ -n "$DNS_INTERCEPT" ]; then
-        log_output "${Y}[!] DNS no convencional configurado: $DNS_INTERCEPT${N}"
-        ((SUSPICIOUS_COUNT++)); FOUND_DNS=1
-    fi
+    for SERVER in "1.1.1.1" "8.8.8.8"; do
+        PING_R=$(adb shell "ping -c 1 -W 3 $SERVER 2>/dev/null | grep -E 'time=|unreachable|100%'" | tr -d '\r')
+        if echo "$PING_R" | grep -qE "unreachable|100%"; then
+            log_output "${Y}[!] Sin conectividad a $SERVER — posible bloqueo${N}"
+            ((SUSPICIOUS_COUNT++)); FOUND_DNS=1
+        elif [ -n "$PING_R" ]; then
+            log_output "${G}[✓] Conectividad a $SERVER OK${N}"
+        fi
+    done
 
-    [ $FOUND_DNS -eq 0 ] && log_output "${G}[✓] DNS funcionando correctamente${N}"
+    [ $FOUND_DNS -eq 0 ] && log_output "${G}[✓] DNS y conectividad normales${N}"
     echo ""
 }
 
@@ -1547,7 +1572,7 @@ check_active_protocols() {
     log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
     FOUND_PROTO=0
 
-    TCP_CONNS=$(adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '{print \$3}' | grep -v 'rem_address' | sort -u" | tr -d '\r')
+    TCP_CONNS=$(echo "$TCP_CACHE" | awk '{print $3}' | grep -v "rem_address" | sort -u)
 
     declare -A PROTO_PORTS
     PROTO_PORTS=(
@@ -1571,7 +1596,7 @@ check_active_protocols() {
         fi
     done
 
-    SOCKS5=$(adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '{print \$3}' | grep -i ':0438'" | tr -d '\r')
+    SOCKS5=$(echo "$TCP_CACHE" | awk '{print $3}' | grep -i ":0438")
     if [ -n "$(echo "$SOCKS5" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] SOCKS5 proxy activo en puerto 1080${N}"
         ((SUSPICIOUS_COUNT+=2)); FOUND_PROTO=1
@@ -1609,4 +1634,5 @@ show_summary() {
 
 check_storage
 main_menu
+
 
