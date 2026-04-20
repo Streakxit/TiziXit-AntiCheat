@@ -388,6 +388,8 @@ ejecutar_scan() {
     check_active_protocols
     check_logcat_delta
     check_process_delta
+    REPLAY_DIR="/sdcard/Android/data/$GAME_PKG/files/MReplays"
+    monitor_activo 8
     show_summary
 
     echo -e "\n${W}Presiona Enter para volver al menú...${N}"; read
@@ -1713,6 +1715,90 @@ check_process_delta() {
     fi
 
     [ $FOUND_DELTA -eq 0 ] && log_output "${G}[✓] Sin procesos sospechosos nuevos durante el scan${N}"
+    echo ""
+}
+
+monitor_activo() {
+    local DURACION_MIN=${1:-8}
+    local INTERVALO_SEG=30
+    local TOTAL_SEG=$((DURACION_MIN * 60))
+    local TRANSCURRIDO=0
+    local ALERTAS=0
+
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     MONITOREO ACTIVO DEL DISPOSITIVO                  ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    log_output "${B}[*] Observando el dispositivo durante ${DURACION_MIN} minutos...${N}"
+    log_output "${B}[*] Intervalo de muestra: ${INTERVALO_SEG} segundos${N}"
+    echo ""
+
+    local LOG_MARCA=$(adb shell "logcat -d -b all 2>/dev/null | wc -l" | tr -d '\r')
+    local PS_BASE=$(adb shell "ps -A 2>/dev/null" | tr -d '\r')
+    local REPLAY_STAT_BASE=$(adb shell "stat '${REPLAY_DIR}' 2>/dev/null" | tr -d '\r')
+
+    local CICLO=0
+    while [ $TRANSCURRIDO -lt $TOTAL_SEG ]; do
+        sleep $INTERVALO_SEG
+        TRANSCURRIDO=$((TRANSCURRIDO + INTERVALO_SEG))
+        CICLO=$((CICLO + 1))
+        local MIN_REST=$(( (TOTAL_SEG - TRANSCURRIDO) / 60 ))
+        local SEG_REST=$(( (TOTAL_SEG - TRANSCURRIDO) % 60 ))
+        echo -ne "
+${B}[*] Muestra $CICLO — Tiempo restante: ${W}${MIN_REST}m ${SEG_REST}s${N}   "
+
+        local LOG_ACTUAL=$(adb shell "logcat -d -b all 2>/dev/null | wc -l" | tr -d '\r')
+        local LOG_NUEVAS=$(( LOG_ACTUAL - LOG_MARCA ))
+        if [ "$LOG_NUEVAS" -gt 0 ] 2>/dev/null; then
+            local LOG_NUEVAS_CONT=$(adb shell "logcat -d -b all 2>/dev/null | tail -n $LOG_NUEVAS" | tr -d '\r')
+            local SUSP_LOG=$(echo "$LOG_NUEVAS_CONT" | grep -iE 'inject|frida|hook|bypass|cheat|su: |access granted|magisk.*allow' | grep -viE 'knox|google' | head -3)
+            if [ -n "$SUSP_LOG" ]; then
+                echo ""
+                log_output "${R}[!] CICLO $CICLO — ACTIVIDAD SOSPECHOSA EN LOG:${N}"
+                echo "$SUSP_LOG" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
+                ((SUSPICIOUS_COUNT+=3)); ((ALERTAS++))
+            fi
+            LOG_MARCA=$LOG_ACTUAL
+        fi
+
+        local PS_ACTUAL=$(adb shell "ps -A 2>/dev/null" | tr -d '\r')
+        local PS_DIFF=$(comm -13             <(echo "$PS_BASE" | awk '{print $NF}' | sort)             <(echo "$PS_ACTUAL" | awk '{print $NF}' | sort) 2>/dev/null)
+        local SUSP_PROC=$(echo "$PS_DIFF" | grep -iE 'frida|inject|hook|cheat|bypass|su$|xposed|lsposed|shizuku' | head -3)
+        if [ -n "$SUSP_PROC" ]; then
+            echo ""
+            log_output "${R}[!] CICLO $CICLO — PROCESO SOSPECHOSO APARECIÓ:${N}"
+            echo "$SUSP_PROC" | while read -r p; do [ -n "$p" ] && log_output "${Y}  $p${N}"; done
+            ((SUSPICIOUS_COUNT+=3)); ((ALERTAS++))
+        fi
+        PS_BASE="$PS_ACTUAL"
+
+        local REPLAY_STAT_ACT=$(adb shell "stat '${REPLAY_DIR}' 2>/dev/null" | tr -d '\r')
+        local RM_ANTES=$(echo "$REPLAY_STAT_BASE" | grep "^Modify:" | head -1)
+        local RM_AHORA=$(echo "$REPLAY_STAT_ACT"  | grep "^Modify:" | head -1)
+        if [ -n "$RM_ANTES" ] && [ "$RM_ANTES" != "$RM_AHORA" ]; then
+            echo ""
+            log_output "${R}[!] CICLO $CICLO — CARPETA MREPLAYS MODIFICADA DURANTE MONITOREO:${N}"
+            log_output "${Y}    Antes: $RM_ANTES${N}"
+            log_output "${Y}    Ahora: $RM_AHORA${N}"
+            ((SUSPICIOUS_COUNT+=5)); ((ALERTAS++))
+        fi
+        REPLAY_STAT_BASE="$REPLAY_STAT_ACT"
+
+        local NET_SUSP=$(adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null" | awk '{print $3}' |             grep -iE ':0438|:69B2|:69B3|:1F90' | head -3 | tr -d '\r')
+        if [ -n "$NET_SUSP" ]; then
+            echo ""
+            log_output "${R}[!] CICLO $CICLO — CONEXION SOSPECHOSA ACTIVA:${N}"
+            echo "$NET_SUSP" | while read -r n; do [ -n "$n" ] && log_output "${Y}  $n${N}"; done
+            ((SUSPICIOUS_COUNT+=2)); ((ALERTAS++))
+        fi
+    done
+
+    echo ""
+    echo ""
+    if [ $ALERTAS -eq 0 ]; then
+        log_output "${G}[✓] Monitoreo completado — sin actividad sospechosa detectada${N}"
+    else
+        log_output "${R}[!] Monitoreo completado — $ALERTAS alerta(s) detectada(s) durante la observacion${N}"
+    fi
     echo ""
 }
 
