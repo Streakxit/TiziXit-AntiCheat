@@ -868,7 +868,7 @@ check_hooks() {
     FOUND_HOOK=0
 
     log_output "${B}[+] Verificando procesos de hooking...${N}"
-    HOOK_PROC=$(echo "$PS_CACHE" | grep -iE 'frida|xposed|lsposed|lspatch|zygisk|riru|shizuku|inject')
+    HOOK_PROC=$(echo "$PS_CACHE" | grep -iE 'frida|xposed|lsposed|lspatch|zygisk|riru|shizuku')
     if [ -n "$HOOK_PROC" ]; then
         log_output "${R}[!] PROCESO DE HOOKING ACTIVO:${N}"
         echo "$HOOK_PROC" | while read -r line; do log_output "${Y}  $line${N}"; done
@@ -876,7 +876,7 @@ check_hooks() {
     fi
 
     log_output "${B}[+] Verificando archivos de hooking...${N}"
-    HOOK_FILES=$(adb shell "find /data /system 2>/dev/null | grep -iE '/frida|/xposed|/lsposed|/lspatch|/riru|inject' | grep -v 'knox' | head -10" | tr -d '\r')
+    HOOK_FILES=$(adb shell "find /data /system 2>/dev/null | grep -iE '/frida|/xposed|/lsposed|/lspatch|/riru' | grep -v 'knox' | head -10" | tr -d '\r')
     if [ -n "$(echo "$HOOK_FILES" | tr -d '[:space:]')" ]; then
         log_output "${R}[!] ARCHIVOS DE HOOKING:${N}"
         echo "$HOOK_FILES" | while read -r f; do [ -n "$f" ] && log_output "${Y}  $f${N}"; done
@@ -1663,7 +1663,7 @@ check_logcat_delta() {
 
     FOUND_LOG=0
 
-    INJECT_LOG=$(echo "$LOG_NUEVO" | grep -iE 'inject|hook|frida|xposed|lsposed|bypass|cheat' | grep -viE 'knox|google' | head -5)
+    INJECT_LOG=$(echo "$LOG_NUEVO" | grep -iE 'inject|hook|frida|xposed|lsposed|bypass|cheat' | grep -viE 'knox|google|InputDispatcher|injectInputEvent|KeyButtonView|dalvik-internals|hooked signal|hooked sigaction|LogPrintln|Inject motion|Inject key' | head -5)
     if [ -n "$INJECT_LOG" ]; then
         log_output "${R}[!] ACTIVIDAD SOSPECHOSA EN LOG DURANTE EL SCAN:${N}"
         echo "$INJECT_LOG" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
@@ -1707,7 +1707,7 @@ check_process_delta() {
             [ -z "$pid" ] && continue
             PROC_LINE=$(echo "$PS_SNAPSHOT_FIN" | awk -v p="$pid" '$2==p {print}' | head -1)
             PROC_NAME=$(echo "$PROC_LINE" | awk '{print $NF}')
-            if echo "$PROC_NAME" | grep -qiE 'frida|hook|inject|cheat|bypass|magisk|xposed|lsposed|shizuku|su$'; then
+            if echo "$PROC_NAME" | grep -qiE 'frida|hook|cheat|bypass|magisk|xposed|lsposed|shizuku|su$'; then
                 log_output "${R}[!] PROCESO SOSPECHOSO APARECIO DURANTE EL SCAN: $PROC_NAME (PID $pid)${N}"
                 ((SUSPICIOUS_COUNT+=3)); FOUND_DELTA=1
             fi
@@ -1750,7 +1750,7 @@ ${B}[*] Muestra $CICLO — Tiempo restante: ${W}${MIN_REST}m ${SEG_REST}s${N}   
         local LOG_NUEVAS=$(( LOG_ACTUAL - LOG_MARCA ))
         if [ "$LOG_NUEVAS" -gt 0 ] 2>/dev/null; then
             local LOG_NUEVAS_CONT=$(adb shell "logcat -d -b all 2>/dev/null | tail -n $LOG_NUEVAS" | tr -d '\r')
-            local SUSP_LOG=$(echo "$LOG_NUEVAS_CONT" | grep -iE 'inject|frida|hook|bypass|cheat|su: |access granted|magisk.*allow' | grep -viE 'knox|google' | head -3)
+            local SUSP_LOG=$(echo "$LOG_NUEVAS_CONT" | grep -iE 'inject|frida|hook|bypass|cheat|su: |access granted|magisk.*allow' | grep -viE 'knox|google|InputDispatcher|injectInputEvent|KeyButtonView|dalvik-internals|hooked signal|hooked sigaction|LogPrintln|Inject motion|Inject key' | head -3)
             if [ -n "$SUSP_LOG" ]; then
                 echo ""
                 log_output "${R}[!] CICLO $CICLO — ACTIVIDAD SOSPECHOSA EN LOG:${N}"
@@ -1762,7 +1762,7 @@ ${B}[*] Muestra $CICLO — Tiempo restante: ${W}${MIN_REST}m ${SEG_REST}s${N}   
 
         local PS_ACTUAL=$(adb shell "ps -A 2>/dev/null" | tr -d '\r')
         local PS_DIFF=$(comm -13             <(echo "$PS_BASE" | awk '{print $NF}' | sort)             <(echo "$PS_ACTUAL" | awk '{print $NF}' | sort) 2>/dev/null)
-        local SUSP_PROC=$(echo "$PS_DIFF" | grep -iE 'frida|inject|hook|cheat|bypass|su$|xposed|lsposed|shizuku' | head -3)
+        local SUSP_PROC=$(echo "$PS_DIFF" | grep -iE 'frida|hook|cheat|bypass|su$|xposed|lsposed|shizuku' | head -3)
         if [ -n "$SUSP_PROC" ]; then
             echo ""
             log_output "${R}[!] CICLO $CICLO — PROCESO SOSPECHOSO APARECIÓ:${N}"
@@ -1830,4 +1830,5 @@ show_summary() {
 
 check_storage
 main_menu
+
 
