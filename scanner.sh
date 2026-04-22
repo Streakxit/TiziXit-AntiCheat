@@ -262,14 +262,14 @@ remote_review_menu() {
 _instalar_remote_viewer() {
     cat > "$HOME/unknown_remote/remote_viewer.py" << 'RV_EOF'
 import os, subprocess, threading, time, io, base64, secrets
-from flask import Flask, Response, request, jsonify, render_template_string
+from flask import Flask, Response, request, jsonify
 
 app = Flask(__name__)
 SESSION_CODE = os.environ.get("REMOTE_SESSION_CODE", "0000")
 FRAME_RATE   = int(os.environ.get("REMOTE_FPS", "4"))
 _tokens = set()
 
-HTML = """<!DOCTYPE html>
+HTML = r"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -546,7 +546,7 @@ def screenshot(full=False):
         return None, 0, 0
 
 @app.route("/")
-def index(): return render_template_string(HTML)
+def index(): return Response(HTML, mimetype="text/html")
 
 @app.route("/auth", methods=["POST"])
 def auth():
