@@ -212,16 +212,12 @@ remote_review_menu() {
         echo -e "${W}Enter para volver...${N}"; read; main_menu; return
     fi
 
-    if [ ! -f "$REMOTE_SERVER" ]; then
-        echo -e "${Y}[*] El servidor remoto no está instalado.${N}"
-        echo -e "${W}  Instalando ahora...${N}"
-        echo ""
-        mkdir -p "$HOME/unknown_remote"
-        pip install flask pillow --break-system-packages -q 2>/dev/null ||             pip install flask pillow -q 2>/dev/null
-        _instalar_remote_viewer
-        echo -e "${G}[✓] Servidor instalado en ~/unknown_remote/${N}"
-        echo ""
-    fi
+    mkdir -p "$HOME/unknown_remote"
+    pip install flask pillow --break-system-packages -q 2>/dev/null || \
+        pip install flask pillow -q 2>/dev/null
+    _instalar_remote_viewer
+    echo -e "${G}[✓] Servidor listo${N}"
+    echo ""
 
     local CODE=$(printf '%04d' $((RANDOM % 9000 + 1000)))
     echo -e "${W}  Se generó un código de autorización: ${G}${CODE}${N}"
