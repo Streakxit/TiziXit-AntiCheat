@@ -269,7 +269,7 @@ SESSION_CODE = os.environ.get("REMOTE_SESSION_CODE", "0000")
 FRAME_RATE   = int(os.environ.get("REMOTE_FPS", "4"))
 _tokens = set()
 
-HTML = r"""<!DOCTYPE html>
+HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
