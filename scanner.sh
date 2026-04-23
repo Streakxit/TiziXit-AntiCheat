@@ -258,7 +258,7 @@ from flask import Flask, Response, request, jsonify
 app = Flask(__name__)
 SESSION_CODE = os.environ.get("REMOTE_SESSION_CODE", "0000")
 TOKENS = set()
-FPS = 4
+FPS = 8
 
 # ── HTML como bytes literales para evitar que Flask lo interprete ──
 HTML = """<!DOCTYPE html>
@@ -487,22 +487,22 @@ def chk(req):
 def adb(cmd):
     try:
         return subprocess.run(["adb","shell"] + cmd.split(),
-                              capture_output=True, text=True, timeout=10).stdout.strip()
+                              capture_output=True, text=True, timeout=5).stdout.strip()
     except Exception:
         return ""
 
 def grab():
     try:
         r = subprocess.run(["adb","exec-out","screencap","-p"],
-                           capture_output=True, timeout=10)
+                           capture_output=True, timeout=5)
         if r.returncode == 0 and r.stdout:
             from PIL import Image
             img = Image.open(io.BytesIO(r.stdout)).convert("RGB")
             w, h = img.size
-            nw = min(w, 800)
-            img = img.resize((nw, int(h * nw / w)), Image.LANCZOS)
+            nw = min(w, 550)
+            img = img.resize((nw, int(h * nw / w)), Image.BILINEAR)
             buf = io.BytesIO()
-            img.save(buf, "JPEG", quality=60)
+            img.save(buf, "JPEG", quality=40)
             return base64.b64encode(buf.getvalue()).decode(), w, h
     except Exception:
         pass
