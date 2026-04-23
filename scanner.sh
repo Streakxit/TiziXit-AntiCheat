@@ -175,34 +175,25 @@ main_menu() {
     esac
 }
 
+
 remote_review_menu() {
     clear; banner
-    local REMOTE_SERVER="$HOME/unknown_remote/remote_viewer.py"
 
     echo -e "${C}╔════════════════════════════════════════════════════════╗${N}"
-    echo -e "${C}║${M}         REVISIÓN REMOTA DE PANTALLA  ${Y}(BETA)${C}          ║${N}"
+    echo -e "${C}║${M}      REVISIÓN REMOTA DE PANTALLA  ${Y}(BETA)${C}            ║${N}"
     echo -e "${C}╚════════════════════════════════════════════════════════╝${N}"
     echo ""
     echo -e "${Y}+========================================================+${N}"
-    echo -e "${Y}|${R}  ⚠  AVISO IMPORTANTE — LEER ANTES DE CONTINUAR  ⚠    ${Y}|${N}"
+    echo -e "${Y}|${R}  ⚠  AVISO — LEER ANTES DE CONTINUAR              ⚠  ${Y}|${N}"
     echo -e "${Y}+--------------------------------------------------------+${N}"
     echo -e "${Y}|${N}"
-    echo -e "${Y}|${W}  Esta herramienta permite al SS ver la pantalla del   ${N}"
-    echo -e "${Y}|${W}  dispositivo escaneado EN TIEMPO REAL para verificar  ${N}"
-    echo -e "${Y}|${W}  manualmente casos dudosos.                           ${N}"
+    echo -e "${Y}|${W}  El SS va a ver y controlar la pantalla del          ${N}"
+    echo -e "${Y}|${W}  dispositivo en tiempo real — igual que AnyDesk.     ${N}"
     echo -e "${Y}|${N}"
-    echo -e "${Y}|${C}  El SS SOLO puede:${N}"
-    echo -e "${Y}|${W}    * Ver la pantalla en tiempo real                   ${N}"
-    echo -e "${Y}|${W}    * Enviar toques básicos de navegación              ${N}"
+    echo -e "${Y}|${W}  El usuario ve TODO lo que el SS hace en su pantalla.${N}"
     echo -e "${Y}|${N}"
-    echo -e "${Y}|${R}  El SS NO puede:${N}"
-    echo -e "${Y}|${W}    * Acceder a archivos ni fotos                      ${N}"
-    echo -e "${Y}|${W}    * Leer mensajes ni datos personales                ${N}"
-    echo -e "${Y}|${W}    * Instalar ni desinstalar aplicaciones             ${N}"
-    echo -e "${Y}|${N}"
-    echo -e "${Y}|${C}  Para cortar el acceso en cualquier momento:${N}"
-    echo -e "${Y}|${W}    * Desactivar Depuración Inalámbrica en Ajustes    ${N}"
-    echo -e "${Y}|${W}    * O escribir: adb disconnect  (en tu Termux)      ${N}"
+    echo -e "${Y}|${C}  Para cortar el acceso en cualquier momento:         ${N}"
+    echo -e "${Y}|${W}    Ajustes → Depuración Inalámbrica → Desactivar     ${N}"
     echo -e "${Y}|${N}"
     echo -e "${Y}+========================================================+${N}"
     echo ""
@@ -212,60 +203,65 @@ remote_review_menu() {
         echo -e "${W}Enter para volver...${N}"; read; main_menu; return
     fi
 
-    mkdir -p "$HOME/unknown_remote"
-    pip install flask pillow --break-system-packages -q 2>/dev/null || \
-        pip install flask pillow -q 2>/dev/null
-    _instalar_remote_viewer
-    echo -e "${G}[✓] Servidor listo${N}"
-    echo ""
-
-    local CODE=$(printf '%04d' $((RANDOM % 9000 + 1000)))
-    echo -e "${W}  Se generó un código de autorización: ${G}${CODE}${N}"
-    echo ""
-    echo -e "${W}  Compartí este código verbalmente con el SS.${N}"
-    echo -e "${W}  El SS deberá ingresarlo en el navegador para conectarse.${N}"
-    echo ""
-    echo -ne "${Y}  ¿Estás de acuerdo en continuar? [s/N]: ${N}"
+    echo -ne "${Y}  ¿El usuario acepta la revisión? [s/N]: ${N}"
     read -r _consent
     if [[ "${_consent,,}" != "s" ]]; then
-        echo -e "${Y}[*] Revisión remota cancelada.${N}"
-        sleep 2; main_menu; return
+        echo -e "${Y}[*] Revisión cancelada.${N}"; sleep 2; main_menu; return
     fi
 
-    local DEVICE_IP
-    DEVICE_IP=$(adb shell "ip route 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | tail -1" | tr -d '
-')
+    pip install flask pillow --break-system-packages -q 2>/dev/null || \
+        pip install flask pillow -q 2>/dev/null
+
+    mkdir -p "$HOME/unknown_remote"
+    _generar_remote_viewer
+    echo -e "${G}[✓] Servidor listo${N}"
+
+    local MY_IP
+    MY_IP=$(ip route get 1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}' | head -1)
+    [ -z "$MY_IP" ] && MY_IP="127.0.0.1"
+
+    local CODE=$(printf '%04d' $((RANDOM % 9000 + 1000)))
     echo ""
-    echo -e "${G}[✓] Iniciando servidor de revisión remota...${N}"
-    echo -e "${B}[*] Dirección web del SS: ${W}http://127.0.0.1:8888${N}"
-    echo -e "${B}[*] Código de sesión: ${G}${CODE}${N}"
-    echo -e "${B}[*] Dispositivo: ${W}${DEVICE_IP}${N}"
+    echo -e "${G}╔════════════════════════════════════════════════════════╗${N}"
+    echo -e "${G}║          REVISIÓN REMOTA — SESIÓN INICIADA             ║${N}"
+    echo -e "${G}╠════════════════════════════════════════════════════════╣${N}"
+    echo -e "${G}║${N}                                                        ${G}║${N}"
+    echo -e "${G}║${W}  Abrí el navegador de tu teléfono y entrá a:         ${G}║${N}"
+    echo -e "${G}║${C}  http://${MY_IP}:8888                                 ${G}║${N}"
+    echo -e "${G}║${N}                                                        ${G}║${N}"
+    echo -e "${G}║${W}  Código de acceso (decíselo al SS verbalmente):      ${G}║${N}"
+    echo -e "${G}║${Y}                   ${CODE}                              ${G}║${N}"
+    echo -e "${G}║${N}                                                        ${G}║${N}"
+    echo -e "${G}║${W}  El usuario puede cortar desactivando Depuración     ${G}║${N}"
+    echo -e "${G}║${W}  Inalámbrica desde Ajustes.                           ${G}║${N}"
+    echo -e "${G}║${N}                                                        ${G}║${N}"
+    echo -e "${G}╚════════════════════════════════════════════════════════╝${N}"
     echo ""
-    echo -e "${Y}[*] Presioná [ENTER] para detener la sesión y desconectar.${N}"
+    echo -e "${Y}[*] Presioná [ENTER] para terminar la sesión y volver al menú.${N}"
     echo ""
 
-    REMOTE_SESSION_CODE="$CODE" python3 "$REMOTE_SERVER" &
-    REMOTE_PID=$!
+    REMOTE_SESSION_CODE="$CODE" python3 "$HOME/unknown_remote/remote_viewer.py" &
+    local RPID=$!
     sleep 2
-
     read -r
-    kill $REMOTE_PID 2>/dev/null
-    adb disconnect 2>/dev/null
-    echo -e "${G}[✓] Sesión remota terminada. ADB desconectado.${N}"
-    sleep 2; main_menu
+    kill $RPID 2>/dev/null
+    wait $RPID 2>/dev/null
+    echo -e "${G}[✓] Sesión remota terminada.${N}"
+    sleep 1; main_menu
 }
 
-_instalar_remote_viewer() {
-    cat > "$HOME/unknown_remote/remote_viewer.py" << 'RV_EOF'
-import os, subprocess, threading, time, io, base64, secrets
+_generar_remote_viewer() {
+cat > "$HOME/unknown_remote/remote_viewer.py" << 'RVEOF'
+import os, subprocess, io, base64, secrets, threading, time
 from flask import Flask, Response, request, jsonify
 
 app = Flask(__name__)
 SESSION_CODE = os.environ.get("REMOTE_SESSION_CODE", "0000")
-FRAME_RATE   = int(os.environ.get("REMOTE_FPS", "4"))
-_tokens = set()
+TOKENS = set()
+FPS = 4
 
-HTML = r"""<!DOCTYPE html>
+# ── HTML como bytes literales para evitar que Flask lo interprete ──
+HTML = b"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -274,364 +270,329 @@ HTML = r"""<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0d0d0d;color:#e0e0e0;font-family:monospace;min-height:100vh}
-#auth{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:14px;padding:24px}
-#auth h2{color:#1e90ff;font-size:15px;letter-spacing:2px;text-align:center}
-#auth p{color:#888;font-size:12px;text-align:center;max-width:280px}
-#code-inp{background:#111;border:1px solid #1e90ff;color:#fff;padding:12px;font-size:28px;text-align:center;border-radius:8px;width:160px;letter-spacing:10px;font-family:monospace}
-#auth-btn{background:#1e90ff;color:#000;border:none;padding:12px 36px;border-radius:8px;font-family:monospace;font-size:14px;font-weight:bold;cursor:pointer}
+#auth{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;padding:24px}
+#auth h2{color:#1e90ff;font-size:16px;letter-spacing:2px;text-align:center}
+#auth p{color:#888;font-size:12px;text-align:center;max-width:280px;line-height:1.6}
+#code-inp{background:#111;border:1px solid #1e90ff;color:#fff;padding:12px;font-size:32px;text-align:center;border-radius:8px;width:170px;letter-spacing:12px;font-family:monospace}
+#auth-btn{background:#1e90ff;color:#000;border:none;padding:12px 40px;border-radius:8px;font-family:monospace;font-size:15px;font-weight:bold;cursor:pointer;width:170px}
+#auth-btn:active{opacity:.8}
 #auth-err{color:#ff4444;font-size:12px;min-height:16px}
-#app{display:none;flex-direction:row;height:100vh;overflow:hidden}
-#left{flex:1;display:flex;flex-direction:column;border-right:1px solid #222}
-#topbar{background:#111;border-bottom:1px solid #1e90ff22;padding:6px 10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#app{display:none;flex-direction:column;height:100vh}
+#topbar{background:#111;border-bottom:1px solid #1e90ff33;padding:7px 12px;display:flex;align-items:center;gap:8px}
 #topbar h1{color:#1e90ff;font-size:11px;letter-spacing:2px;flex:1}
-#badge{background:#1a1a2e;border:1px solid #ff4444;color:#ff4444;padding:2px 8px;border-radius:3px;font-size:10px}
-#screen-wrap{flex:1;overflow:hidden;position:relative;background:#000;cursor:crosshair}
-#screen{width:100%;height:100%;object-fit:contain;display:block;touch-action:none}
-#overlay{position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair}
-#navbar{background:#111;border-top:1px solid #222;padding:6px;display:flex;gap:6px;justify-content:center}
-.nbtn{background:#1a1a2e;border:1px solid #333;color:#ccc;padding:8px 14px;border-radius:5px;font-size:12px;cursor:pointer;font-family:monospace}
-.nbtn:active,.nbtn:hover{background:#1e90ff22;border-color:#1e90ff;color:#1e90ff}
-.rbtn{border-color:#ff4444;color:#ff4444}
-.rbtn:hover{background:#ff444422}
-#right{width:280px;display:flex;flex-direction:column;background:#0a0a0a}
-#rtabs{display:flex;border-bottom:1px solid #222}
-.rtab{flex:1;padding:8px;text-align:center;font-size:11px;cursor:pointer;color:#666;border-bottom:2px solid transparent}
-.rtab.active{color:#1e90ff;border-bottom-color:#1e90ff}
-#rpanel{flex:1;overflow-y:auto;padding:8px}
-.file-item{padding:7px 8px;border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;color:#ccc;border-bottom:1px solid #111}
-.file-item:hover{background:#1a1a1a;color:#fff}
-.file-item .ico{font-size:14px;width:20px;text-align:center}
-.file-item .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.file-item .meta{font-size:10px;color:#555}
-#path-bar{padding:6px 8px;font-size:10px;color:#1e90ff;background:#111;border-bottom:1px solid #222;word-break:break-all;cursor:pointer}
-#log{padding:8px;font-size:10px;color:#888;overflow-y:auto;flex:1}
-.log-line{padding:2px 0;border-bottom:1px solid #111}
-.log-r{color:#ff6666}
-.log-g{color:#66ff99}
-.log-y{color:#ffcc44}
-#text-row{display:flex;gap:4px;padding:6px;border-top:1px solid #222}
-#text-inp{flex:1;background:#111;border:1px solid #333;color:#fff;padding:6px;border-radius:4px;font-family:monospace;font-size:12px}
-#send-btn{background:#1e90ff;color:#000;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px}
-@media(max-width:600px){#right{display:none}#app{flex-direction:column}}
+#badge{background:#0a2a0a;border:1px solid #44ff44;color:#44ff44;padding:2px 8px;border-radius:3px;font-size:10px}
+#main{flex:1;display:flex;overflow:hidden}
+#screen-col{flex:1;display:flex;flex-direction:column;background:#000}
+#screen-wrap{flex:1;position:relative;overflow:hidden}
+#screen{width:100%;height:100%;object-fit:contain;display:block}
+#overlay{position:absolute;top:0;left:0;width:100%;height:100%}
+#navbar{background:#0f0f0f;border-top:1px solid #222;padding:6px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+.nb{background:#1a1a2e;border:1px solid #333;color:#ccc;padding:8px 12px;border-radius:5px;font-size:12px;cursor:pointer;font-family:monospace}
+.nb:active{background:#1e90ff;color:#000;border-color:#1e90ff}
+.rb{border-color:#ff4444;color:#ff4444}
+.rb:active{background:#ff4444;color:#000}
+#sidebar{width:260px;display:flex;flex-direction:column;border-left:1px solid #1a1a1a;background:#080808}
+#path{padding:7px 10px;font-size:10px;color:#1e90ff;background:#111;border-bottom:1px solid #1a1a1a;cursor:pointer;word-break:break-all}
+#files{flex:1;overflow-y:auto}
+.fi{display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;border-bottom:1px solid #0f0f0f;font-size:11px;color:#bbb}
+.fi:active,.fi:hover{background:#151515;color:#fff}
+.fi .ic{width:18px;text-align:center;font-size:13px;flex-shrink:0}
+.fi .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fi .sz{font-size:10px;color:#444;flex-shrink:0}
+@media(max-width:500px){#sidebar{display:none}}
 </style>
 </head>
 <body>
+
 <div id="auth">
-  <h2>UNKNOWN · REVISIÓN REMOTA</h2>
-  <p>Ingresá el código de 4 dígitos que el usuario te proporcionó verbalmente.</p>
-  <input id="code-inp" type="tel" maxlength="4" placeholder="0000" autocomplete="off">
+  <h2>UNKNOWN<br>REVISIÓN REMOTA</h2>
+  <p>Ingresá el código de 4 dígitos que el usuario te dijo verbalmente.</p>
+  <input id="code-inp" type="tel" inputmode="numeric" maxlength="4" placeholder="0000">
   <button id="auth-btn" onclick="doAuth()">CONECTAR</button>
   <div id="auth-err"></div>
 </div>
 
 <div id="app">
-  <div id="left">
-    <div id="topbar">
-      <h1>UNKNOWN REMOTE</h1>
-      <span id="badge">● ACTIVO</span>
-      <button class="nbtn rbtn" style="padding:4px 10px;font-size:11px" onclick="endSession()">TERMINAR</button>
-    </div>
-    <div id="screen-wrap">
-      <img id="screen" src="" alt="">
-      <div id="overlay"></div>
-    </div>
-    <div id="navbar">
-      <button class="nbtn" onclick="nav('back')">◀ Atrás</button>
-      <button class="nbtn" onclick="nav('home')">⬤ Inicio</button>
-      <button class="nbtn" onclick="nav('recents')">▦ Recientes</button>
-      <button class="nbtn" onclick="nav('power_menu')">⏻ Menú</button>
-      <button class="nbtn" onclick="captureScreen()">📷 Captura</button>
-    </div>
+  <div id="topbar">
+    <h1>UNKNOWN · REVISIÓN REMOTA</h1>
+    <span id="badge">● EN VIVO</span>
+    <button class="nb rb" style="padding:4px 10px;font-size:11px" onclick="endSession()">TERMINAR</button>
   </div>
-
-  <div id="right">
-    <div id="rtabs">
-      <div class="rtab active" onclick="showTab('files')">📁 Archivos</div>
-      <div class="rtab" onclick="showTab('log')">📋 Log</div>
-      <div class="rtab" onclick="showTab('input')">⌨ Texto</div>
+  <div id="main">
+    <div id="screen-col">
+      <div id="screen-wrap">
+        <img id="screen" src="" alt="Pantalla">
+        <div id="overlay"></div>
+      </div>
+      <div id="navbar">
+        <button class="nb" onclick="nav('back')">◀ Atrás</button>
+        <button class="nb" onclick="nav('home')">⬤ Inicio</button>
+        <button class="nb" onclick="nav('recents')">▦ Recientes</button>
+        <button class="nb" onclick="nav('notifications')">🔔 Notif</button>
+        <button class="nb" onclick="saveScreen()">📷 Captura</button>
+      </div>
     </div>
-    <div id="path-bar" onclick="goUp()">/sdcard</div>
-    <div id="rpanel"></div>
+    <div id="sidebar">
+      <div id="path" onclick="goUp()">/sdcard</div>
+      <div id="files"></div>
+    </div>
   </div>
 </div>
 
 <script>
-let token = "", streaming = false;
-let W = 1080, H = 1920;
-let swipeStart = null;
-let currentPath = "/sdcard";
-let currentTab = "files";
+let token = "", W = 1080, H = 1920, running = false, swipeStart = null;
+let curPath = "/sdcard";
 
 const overlay = document.getElementById("overlay");
-const screen  = document.getElementById("screen");
-const logEl   = document.getElementById("log");
+const screenImg = document.getElementById("screen");
 
-// ── Auth ──
+document.getElementById("code-inp").addEventListener("keydown", e => {
+  if (e.key === "Enter") doAuth();
+});
+
 function doAuth() {
-  const code = document.getElementById("code-inp").value;
-  post("/auth", {code}).then(d => {
+  const code = document.getElementById("code-inp").value.trim();
+  fetch("/auth", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({code})
+  }).then(r => r.json()).then(d => {
     if (d.ok) {
       token = d.token;
       document.getElementById("auth").style.display = "none";
       document.getElementById("app").style.display = "flex";
-      startStream();
-      browseFiles("/sdcard");
+      running = true;
+      streamLoop();
+      browse("/sdcard");
     } else {
       document.getElementById("auth-err").textContent = "Código incorrecto.";
     }
+  }).catch(() => {
+    document.getElementById("auth-err").textContent = "Error de conexión.";
   });
 }
-document.getElementById("code-inp").addEventListener("keydown", e => { if(e.key==="Enter") doAuth(); });
 
-// ── Stream ──
-function startStream() {
-  streaming = true;
-  (function loop() {
-    if (!streaming) return;
-    fetch("/frame?t=" + Date.now(), {headers:{"X-Token":token}})
-      .then(r => r.json()).then(d => {
-        if (d.img) { screen.src = "data:image/jpeg;base64," + d.img; W=d.w; H=d.h; }
-        setTimeout(loop, 1000 / """ + str(FRAME_RATE) + r""");
-      }).catch(() => setTimeout(loop, 2000));
-  })();
+function streamLoop() {
+  if (!running) return;
+  fetch("/frame?_=" + Date.now(), {headers: {"X-Token": token}})
+    .then(r => r.json())
+    .then(d => {
+      if (d.img) { screenImg.src = "data:image/jpeg;base64," + d.img; W = d.w; H = d.h; }
+      setTimeout(streamLoop, 1000 / """ + str(FPS).encode() + b""");
+    })
+    .catch(() => setTimeout(streamLoop, 3000));
 }
 
-// ── Touch / Click sobre pantalla ──
 overlay.addEventListener("click", e => {
-  const r = screen.getBoundingClientRect();
+  const r = screenImg.getBoundingClientRect();
   const x = Math.round((e.clientX - r.left) * W / r.width);
-  const y = Math.round((e.clientY - r.top)  * H / r.height);
-  post("/tap", {x, y});
+  const y = Math.round((e.clientY - r.top) * H / r.height);
+  api("/tap", {x, y});
 });
 
 overlay.addEventListener("touchstart", e => {
-  const t = e.touches[0], r = screen.getBoundingClientRect();
-  swipeStart = {x:(t.clientX-r.left)*W/r.width, y:(t.clientY-r.top)*H/r.height, t:Date.now()};
-}, {passive:true});
+  const t = e.touches[0], r = screenImg.getBoundingClientRect();
+  swipeStart = {
+    x: (t.clientX - r.left) * W / r.width,
+    y: (t.clientY - r.top)  * H / r.height,
+    ts: Date.now()
+  };
+}, {passive: true});
 
 overlay.addEventListener("touchend", e => {
   if (!swipeStart) return;
-  const t = e.changedTouches[0], r = screen.getBoundingClientRect();
-  const ex = (t.clientX-r.left)*W/r.width, ey = (t.clientY-r.top)*H/r.height;
-  const dx = ex-swipeStart.x, dy = ey-swipeStart.y, dt = Date.now()-swipeStart.t;
-  if (Math.abs(dx)<20 && Math.abs(dy)<20) {
-    post("/tap", {x:Math.round(ex), y:Math.round(ey)});
+  const t = e.changedTouches[0], r = screenImg.getBoundingClientRect();
+  const ex = (t.clientX - r.left) * W / r.width;
+  const ey = (t.clientY - r.top)  * H / r.height;
+  const dx = ex - swipeStart.x, dy = ey - swipeStart.y;
+  const dur = Date.now() - swipeStart.ts;
+  if (Math.abs(dx) < 15 && Math.abs(dy) < 15) {
+    api("/tap", {x: Math.round(ex), y: Math.round(ey)});
   } else {
-    post("/swipe", {x1:Math.round(swipeStart.x), y1:Math.round(swipeStart.y), x2:Math.round(ex), y2:Math.round(ey), dur:dt});
+    api("/swipe", {
+      x1: Math.round(swipeStart.x), y1: Math.round(swipeStart.y),
+      x2: Math.round(ex),           y2: Math.round(ey),
+      dur: Math.min(dur, 2000)
+    });
   }
   swipeStart = null;
-}, {passive:true});
+}, {passive: true});
 
-// ── Nav ──
-function nav(action) { post("/nav", {action}); }
+function nav(action) { api("/nav", {action}); }
 
-// ── Files ──
-function showTab(tab) {
-  currentTab = tab;
-  document.querySelectorAll(".rtab").forEach((el,i) => el.classList.toggle("active", ["files","log","input"][i]===tab));
-  const rp = document.getElementById("rpanel");
-  if (tab === "files") { rp.innerHTML = ""; browseFiles(currentPath); }
-  else if (tab === "log") { rp.innerHTML = ""; rp.appendChild(logEl); }
-  else if (tab === "input") {
-    rp.innerHTML = '<div id="text-row" style="margin-top:8px"><input id="text-inp" placeholder="Texto a escribir..." /><button id="send-btn" onclick="sendText()">▶</button></div>';
-  }
-}
-
-function browseFiles(path) {
-  currentPath = path;
-  document.getElementById("path-bar").textContent = path;
-  fetch("/ls?path=" + encodeURIComponent(path), {headers:{"X-Token":token}})
-    .then(r => r.json()).then(d => {
-      const rp = document.getElementById("rpanel");
-      rp.innerHTML = "";
-      if (!d.entries) return;
-      d.entries.forEach(e => {
+function browse(path) {
+  curPath = path;
+  document.getElementById("path").textContent = path;
+  fetch("/ls?path=" + encodeURIComponent(path), {headers: {"X-Token": token}})
+    .then(r => r.json())
+    .then(d => {
+      const el = document.getElementById("files");
+      el.innerHTML = "";
+      (d.entries || []).forEach(e => {
         const div = document.createElement("div");
-        div.className = "file-item";
-        const ico = e.type === "dir" ? "📁" : "📄";
-        div.innerHTML = `<span class="ico">${ico}</span><span class="name">${e.name}</span><span class="meta">${e.size||""}</span>`;
+        div.className = "fi";
+        div.innerHTML = `<span class="ic">${e.t === "d" ? "📁" : "📄"}</span>
+                         <span class="nm">${e.n}</span>
+                         <span class="sz">${e.s || ""}</span>`;
         div.onclick = () => {
-          if (e.type === "dir") browseFiles(path + "/" + e.name);
-          else confirmOpen(path + "/" + e.name);
+          if (e.t === "d") browse(path + "/" + e.n);
+          else if (confirm("¿Abrir " + e.n + " en el dispositivo?")) {
+            api("/open", {path: path + "/" + e.n});
+          }
         };
-        rp.appendChild(div);
+        el.appendChild(div);
       });
     });
 }
 
 function goUp() {
-  const p = currentPath.split("/").filter(Boolean);
-  if (p.length > 1) { p.pop(); browseFiles("/" + p.join("/")); }
-  else browseFiles("/sdcard");
+  const parts = curPath.split("/").filter(Boolean);
+  if (parts.length > 1) { parts.pop(); browse("/" + parts.join("/")); }
+  else browse("/sdcard");
 }
 
-function confirmOpen(path) {
-  if (confirm("¿Abrir en el dispositivo?\n" + path)) post("/open", {path});
-}
-
-function captureScreen() {
-  fetch("/screenshot", {headers:{"X-Token":token}})
-    .then(r => r.json()).then(d => {
+function saveScreen() {
+  fetch("/screenshot", {headers: {"X-Token": token}})
+    .then(r => r.json())
+    .then(d => {
       if (d.img) {
         const a = document.createElement("a");
-        a.href = "data:image/png;base64," + d.img;
-        a.download = "screenshot_" + Date.now() + ".png";
+        a.href = "data:image/jpeg;base64," + d.img;
+        a.download = "remote_" + Date.now() + ".jpg";
         a.click();
       }
     });
 }
 
-function sendText() {
-  const v = document.getElementById("text-inp").value;
-  if (v) { post("/type", {text: v}); document.getElementById("text-inp").value = ""; }
-}
-
-function addLog(msg, cls="") {
-  const d = document.createElement("div");
-  d.className = "log-line " + cls;
-  d.textContent = new Date().toLocaleTimeString() + " " + msg;
-  logEl.appendChild(d);
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
 function endSession() {
   if (!confirm("¿Terminar la sesión remota?")) return;
-  post("/disconnect", {}).then(() => { streaming = false; location.reload(); });
+  running = false;
+  api("/disconnect", {}).finally(() => location.reload());
 }
 
-// ── Helpers ──
-function post(url, body) {
-  return fetch(url, {method:"POST", headers:{"Content-Type":"application/json","X-Token":token}, body:JSON.stringify(body)})
-    .then(r => r.json()).catch(() => ({}));
+function api(url, body) {
+  return fetch(url, {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "X-Token": token},
+    body: JSON.stringify(body)
+  }).then(r => r.json()).catch(() => ({}));
 }
 </script>
 </body>
 </html>"""
 
-def check(req):
-    return req.headers.get("X-Token","") in _tokens
+def chk(req):
+    return req.headers.get("X-Token", "") in TOKENS
 
-def adb_run(cmd):
+def adb(cmd):
     try:
-        r = subprocess.run(["adb","shell"] + cmd.split(), capture_output=True, text=True, timeout=10)
-        return r.stdout.strip()
+        return subprocess.run(["adb","shell"] + cmd.split(),
+                              capture_output=True, text=True, timeout=10).stdout.strip()
     except Exception:
         return ""
 
-def adb_raw(args):
+def grab():
     try:
-        return subprocess.run(["adb"] + args, capture_output=True, timeout=15)
-    except Exception:
-        return None
-
-def screenshot(full=False):
-    try:
-        r = adb_raw(["exec-out","screencap","-p"])
-        if not r or r.returncode != 0 or not r.stdout:
-            return None, 0, 0
-        from PIL import Image
-        img = Image.open(io.BytesIO(r.stdout)).convert("RGB")
-        w, h = img.size
-        if not full:
+        r = subprocess.run(["adb","exec-out","screencap","-p"],
+                           capture_output=True, timeout=10)
+        if r.returncode == 0 and r.stdout:
+            from PIL import Image
+            img = Image.open(io.BytesIO(r.stdout)).convert("RGB")
+            w, h = img.size
             nw = min(w, 800)
             img = img.resize((nw, int(h * nw / w)), Image.LANCZOS)
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG" if not full else "PNG", quality=65)
-        return base64.b64encode(buf.getvalue()).decode(), w, h
+            buf = io.BytesIO()
+            img.save(buf, "JPEG", quality=60)
+            return base64.b64encode(buf.getvalue()).decode(), w, h
     except Exception:
-        return None, 0, 0
+        pass
+    return None, 0, 0
 
 @app.route("/")
-def index(): return Response(HTML, mimetype="text/html")
+def index():
+    return Response(HTML, mimetype="text/html")
 
 @app.route("/auth", methods=["POST"])
 def auth():
-    code = str((request.json or {}).get("code",""))
+    code = str((request.json or {}).get("code", ""))
     if code == SESSION_CODE:
-        tok = secrets.token_hex(16); _tokens.add(tok)
-        return jsonify({"ok":True,"token":tok})
-    return jsonify({"ok":False})
+        tok = secrets.token_hex(16)
+        TOKENS.add(tok)
+        return jsonify({"ok": True, "token": tok})
+    return jsonify({"ok": False})
 
 @app.route("/frame")
 def frame():
-    if not check(request): return jsonify({}), 401
-    img, w, h = screenshot()
-    return jsonify({"img":img,"w":w,"h":h})
+    if not chk(request): return jsonify({}), 401
+    img, w, h = grab()
+    return jsonify({"img": img, "w": w, "h": h})
 
 @app.route("/screenshot")
-def full_screenshot():
-    if not check(request): return jsonify({}), 401
-    img, w, h = screenshot(full=True)
-    return jsonify({"img":img,"w":w,"h":h})
+def screenshot():
+    if not chk(request): return jsonify({}), 401
+    img, w, h = grab()
+    return jsonify({"img": img})
 
 @app.route("/tap", methods=["POST"])
 def tap():
-    if not check(request): return jsonify({}), 401
+    if not chk(request): return jsonify({}), 401
     d = request.json or {}
-    adb_run(f"input tap {d.get('x',0)} {d.get('y',0)}")
-    return jsonify({"ok":True})
+    adb(f"input tap {int(d.get('x',0))} {int(d.get('y',0))}")
+    return jsonify({"ok": True})
 
 @app.route("/swipe", methods=["POST"])
 def swipe():
-    if not check(request): return jsonify({}), 401
+    if not chk(request): return jsonify({}), 401
     d = request.json or {}
-    dur = max(100, min(int(d.get("dur",300)), 2000))
-    adb_run(f"input swipe {d.get('x1',0)} {d.get('y1',0)} {d.get('x2',0)} {d.get('y2',0)} {dur}")
-    return jsonify({"ok":True})
+    dur = max(50, min(int(d.get("dur", 300)), 2000))
+    adb(f"input swipe {int(d.get('x1',0))} {int(d.get('y1',0))} {int(d.get('x2',0))} {int(d.get('y2',0))} {dur}")
+    return jsonify({"ok": True})
 
 @app.route("/nav", methods=["POST"])
 def nav():
-    if not check(request): return jsonify({}), 401
-    action = (request.json or {}).get("action","")
-    keys = {"back":"4","home":"3","recents":"187","power_menu":"26"}
+    if not chk(request): return jsonify({}), 401
+    action = (request.json or {}).get("action", "")
+    keys = {"back":"4","home":"3","recents":"187","notifications":"83 && adb shell input keyevent 83"}
     if action in keys:
-        adb_run(f"input keyevent {keys[action]}")
-    return jsonify({"ok":True})
+        adb(f"input keyevent {keys[action]}")
+    return jsonify({"ok": True})
 
 @app.route("/ls")
 def ls():
-    if not check(request): return jsonify({}), 401
-    path = request.args.get("path", "/sdcard")
-    path = path.replace("'","").replace(";","").replace("&","")
-    raw = adb_run(f"ls -la '{path}'")
+    if not chk(request): return jsonify({}), 401
+    path = request.args.get("path", "/sdcard").replace("'","").replace(";","")
+    raw = adb(f"ls -la '{path}'")
     entries = []
     for line in raw.splitlines():
-        parts = line.split(None, 8)
-        if len(parts) < 2: continue
-        perms = parts[0]
-        name  = parts[-1].strip() if len(parts) >= 9 else parts[-1]
+        p = line.split(None, 8)
+        if len(p) < 2: continue
+        name = p[-1].strip()
         if name in (".", ".."): continue
-        size = parts[4] if len(parts) >= 6 and parts[4].isdigit() else ""
-        ftype = "dir" if perms.startswith("d") else "file"
-        entries.append({"name": name, "type": ftype, "size": size})
-    entries.sort(key=lambda x: (0 if x["type"]=="dir" else 1, x["name"].lower()))
-    return jsonify({"ok":True,"entries":entries,"path":path})
+        size = p[4] if len(p) >= 6 and p[4].isdigit() else ""
+        ftype = "d" if p[0].startswith("d") else "f"
+        entries.append({"n": name, "t": ftype, "s": size})
+    entries.sort(key=lambda x: (0 if x["t"]=="d" else 1, x["n"].lower()))
+    return jsonify({"ok": True, "entries": entries})
 
 @app.route("/open", methods=["POST"])
 def open_file():
-    if not check(request): return jsonify({}), 401
-    path = (request.json or {}).get("path","").replace("'","").replace(";","")
-    adb_run(f"am start -a android.intent.action.VIEW -d 'file://{path}'")
-    return jsonify({"ok":True})
-
-@app.route("/type", methods=["POST"])
-def type_text():
-    if not check(request): return jsonify({}), 401
-    text = (request.json or {}).get("text","").replace("'","").replace(";","")
-    adb_run(f"input text '{text}'")
-    return jsonify({"ok":True})
+    if not chk(request): return jsonify({}), 401
+    path = (request.json or {}).get("path", "").replace("'","").replace(";","")
+    adb(f"am start -a android.intent.action.VIEW -d 'file://{path}'")
+    return jsonify({"ok": True})
 
 @app.route("/disconnect", methods=["POST"])
 def disconnect():
-    if not check(request): return jsonify({}), 401
+    if not chk(request): return jsonify({}), 401
     threading.Thread(target=lambda: (time.sleep(0.5), os._exit(0))).start()
-    return jsonify({"ok":True})
+    return jsonify({"ok": True})
 
 if __name__ == "__main__":
-    print(f"[UNKNOWN Remote] Iniciando en http://127.0.0.1:8888")
-    app.run(host="127.0.0.1", port=8888, debug=False, threaded=True)
-RV_EOF
+    print(f"[UNKNOWN Remote] http://0.0.0.0:8888  codigo={SESSION_CODE}")
+    app.run(host="0.0.0.0", port=8888, debug=False, threaded=True)
+RVEOF
 }
+
 
 actualizar_scanner() {
     clear; banner
