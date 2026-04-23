@@ -261,7 +261,7 @@ TOKENS = set()
 FPS = 4
 
 # ── HTML como bytes literales para evitar que Flask lo interprete ──
-HTML = b"""<!DOCTYPE html>
+HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -378,7 +378,7 @@ function streamLoop() {
     .then(r => r.json())
     .then(d => {
       if (d.img) { screenImg.src = "data:image/jpeg;base64," + d.img; W = d.w; H = d.h; }
-      setTimeout(streamLoop, 1000 / """ + str(FPS).encode() + b""");
+      setTimeout(streamLoop, 1000 / """ + str(FPS) + """);
     })
     .catch(() => setTimeout(streamLoop, 3000));
 }
@@ -2251,4 +2251,3 @@ show_summary() {
 
 check_storage
 main_menu
-
