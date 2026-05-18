@@ -28,7 +28,7 @@ registrar_uso() {
     echo "$count" > "$STATS_FILE"
     curl -sf --max-time 4 -X POST "${BACKEND_URL}/api/stats/scan" \
         -H "Content-Type: application/json" \
-        -d '{"version":"1.4.0"}' &>/dev/null &
+        -d '{"version":"1.5.0"}' &>/dev/null &
 }
 
 obtener_stats_global() {
@@ -118,7 +118,7 @@ banner() {
     local _l; _l=$(cat "$STATS_FILE" 2>/dev/null || echo "0")
     local _g; _g=$(curl -sf --max-time 3 "${BACKEND_URL}/api/stats/scan" 2>/dev/null | grep -o '"total":[0-9]*' | grep -o '[0-9]*' || echo "?")
     printf "%b\n" "${C}║${M}$( _center "CODE BY TIZI.XIT - ANTI-CHEAT SYSTEM" )${C}║${N}"
-    printf "%b\n" "${C}║${M}$( _center "VERSIÓN 1.4.0" )${C}║${N}"
+    printf "%b\n" "${C}║${M}$( _center "VERSIÓN 1.5.0" )${C}║${N}"
     printf "%b\n" "${C}║${G}$( _center "Scans globales: ${_g}  |  Este dispositivo: ${_l}" )${C}║${N}"
     printf "%b\n" "${C}${bottom}${N}"
     echo ""
@@ -782,6 +782,7 @@ ejecutar_scan() {
     check_replays
     check_wallhack_bypass
     check_obb
+    check_apk_integrity
     check_hooks
     check_root_bypass
     check_fake_time
@@ -852,7 +853,20 @@ check_device_info() {
     DEVICE_BRAND=$(adb shell getprop ro.product.brand | tr -d '\r\n')
     log_output "${B}[*] Android: ${W}$ANDROID_VER${N}"
     log_output "${B}[*] Modelo:  ${W}$DEVICE_MODEL${N}"
-    log_output "${B}[*] Marca:   ${W}$DEVICE_BRAND${N}\n"
+    log_output "${B}[*] Marca:   ${W}$DEVICE_BRAND${N}"
+
+    # Versión del juego instalado
+    GAME_VER=$(adb shell "dumpsys package $GAME_PKG 2>/dev/null | grep versionName | head -1" | tr -d '\r' | sed 's/.*versionName=//')
+    [ -n "$GAME_VER" ] && log_output "${B}[*] Versión del juego: ${W}$GAME_VER${N}"
+
+    # PID del proceso del juego (indica si está activo durante el scan)
+    GAME_PID=$(adb shell "pidof $GAME_PKG 2>/dev/null" | tr -d '\r\n')
+    if [ -n "$GAME_PID" ]; then
+        log_output "${B}[*] PID del juego: ${W}$GAME_PID ${G}(proceso activo)${N}"
+    else
+        log_output "${B}[*] PID del juego: ${Y}no encontrado (juego no corriendo)${N}"
+    fi
+    echo ""
 }
 
 check_root() {
@@ -1254,21 +1268,46 @@ check_replays() {
 }
 
 check_wallhack_bypass() {
-    log_output "${B}[+] Verificando shaders...${N}"
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     WALLHACK / SHADERS / OVERLAYS                     ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+    FOUND_WH=0
+
+    # Shaders por firma UnityFS (archivos de shader modificados)
+    log_output "${B}[+] Verificando shaders (firma UnityFS)...${N}"
     SHADER_DIR="/sdcard/Android/data/$GAME_PKG/files/contentcache/Optional/android/gameassetbundles"
     SHADERS=$(adb shell "find '$SHADER_DIR' -name 'shader*' 2>/dev/null" | tr -d '\r' | head -3)
-    if [ -z "$SHADERS" ]; then
-        log_output "${G}[✓] Sin shaders modificados${N}\n"; return
+    if [ -n "$(echo "$SHADERS" | tr -d '[:space:]')" ]; then
+        echo "$SHADERS" | while read -r shader; do
+            [ -z "$shader" ] && continue
+            UNITY=$(adb shell "head -c 7 '$shader' 2>/dev/null")
+            if [ "$UNITY" != "UnityFS" ]; then
+                log_output "${R}[!] SHADER INVÁLIDO (firma incorrecta): $(basename "$shader")${N}"
+                ((SUSPICIOUS_COUNT+=3)); FOUND_WH=1
+            fi
+        done
     fi
-    SHADER_OK=1
-    echo "$SHADERS" | while read -r shader; do
-        UNITY=$(adb shell "head -c 7 '$shader' 2>/dev/null")
-        if [ "$UNITY" != "UnityFS" ]; then
-            log_output "${R}[!] SHADER INVÁLIDO: $(basename "$shader")${N}"
-            ((SUSPICIOUS_COUNT+=3)); SHADER_OK=0
+
+    # Shaders por nombre de color conocido (wallhack de colores)
+    log_output "${B}[+] Verificando overlays por nombre de color...${N}"
+    for shader in branco verde ciano laranja amarelo marelomag agente; do
+        NAMED=$(adb shell "find /sdcard/Android/data/$GAME_PKG -name '*${shader}*' 2>/dev/null | head -1" | tr -d '\r')
+        if [ -n "$(echo "$NAMED" | tr -d '[:space:]')" ]; then
+            log_output "${R}[!] OVERLAY/SHADER POR NOMBRE DETECTADO: $(basename "$NAMED") (patrón: $shader)${N}"
+            ((SUSPICIOUS_COUNT+=3)); FOUND_WH=1
         fi
     done
-    [ $SHADER_OK -eq 1 ] && log_output "${G}[✓] Shaders OK${N}"
+
+    # Overlays sueltos en raíz de /sdcard
+    log_output "${B}[+] Verificando overlays en /sdcard raíz...${N}"
+    SDCARD_OVL=$(adb shell "ls /sdcard/ 2>/dev/null | grep -iE 'overlay|shader|Overlay'" | tr -d '\r')
+    if [ -n "$(echo "$SDCARD_OVL" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] ARCHIVOS DE OVERLAY EN /sdcard:${N}"
+        echo "$SDCARD_OVL" | while read -r f; do [ -n "$f" ] && log_output "${Y}  /sdcard/$f${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_WH=1
+    fi
+
+    [ $FOUND_WH -eq 0 ] && log_output "${G}[✓] Sin shaders ni overlays sospechosos${N}"
     echo ""
 }
 
@@ -1280,6 +1319,36 @@ check_obb() {
     else
         log_output "${G}[✓] OBB presente${N}\n"
     fi
+}
+
+check_apk_integrity() {
+    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
+    log_output "${C}║${W}     INTEGRIDAD DEL APK / HASH SHA256                  ${C}║${N}"
+    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
+
+    APK_PATH=$(adb shell "pm path $GAME_PKG 2>/dev/null | head -1" | tr -d '\r' | sed 's/^package://')
+    if [ -z "$(echo "$APK_PATH" | tr -d '[:space:]')" ]; then
+        log_output "${Y}[*] No se pudo obtener el path del APK${N}"
+        echo ""; return
+    fi
+
+    log_output "${B}[*] APK path: ${W}$APK_PATH${N}"
+    log_output "${B}[+] Calculando SHA256 (puede tardar unos segundos)...${N}"
+    APK_SHA=$(adb shell "sha256sum '$APK_PATH' 2>/dev/null | awk '{print \$1}'" | tr -d '\r\n')
+
+    if [ -n "$APK_SHA" ] && [ ${#APK_SHA} -eq 64 ]; then
+        log_output "${B}[*] SHA256: ${W}$APK_SHA${N}"
+        # Validar que empiece con un hash coherente (no todo ceros)
+        if echo "$APK_SHA" | grep -qE '^0{64}$'; then
+            log_output "${R}[!] SHA256 inválido (todo ceros) — posible error de lectura${N}"
+            ((SUSPICIOUS_COUNT++))
+        else
+            log_output "${G}[✓] SHA256 calculado correctamente${N}"
+        fi
+    else
+        log_output "${Y}[*] No se pudo calcular SHA256${N}"
+    fi
+    echo ""
 }
 
 check_hooks() {
@@ -1344,6 +1413,29 @@ check_root_bypass() {
     MAGISK_FILES=$(adb shell "ls /data/adb/magisk 2>/dev/null" | tr -d '\r')
     if [ -n "$MAGISK_FILES" ]; then
         log_output "${R}[!] MAGISK DETECTADO (/data/adb/magisk existe)${N}"
+        ((SUSPICIOUS_COUNT+=3)); BYPASS_FOUND=1
+    fi
+
+    # APatch (root via kernel patch)
+    APATCH_FILES=$(adb shell "ls /data/adb/apatch 2>/dev/null && echo found" | tr -d '\r')
+    if echo "$APATCH_FILES" | grep -q "found"; then
+        log_output "${R}[!] APATCH DETECTADO (/data/adb/apatch existe)${N}"
+        ((SUSPICIOUS_COUNT+=3)); BYPASS_FOUND=1
+    fi
+
+    # KernelSU — binario ksud + directorio /data/adb/ksu
+    KSU_BIN=$(adb shell "ksud --version 2>/dev/null | head -1" | tr -d '\r')
+    KSU_DIR=$(adb shell "ls /data/adb/ksu 2>/dev/null && echo found" | tr -d '\r')
+    if [ -n "$KSU_BIN" ] || echo "$KSU_DIR" | grep -q "found"; then
+        log_output "${R}[!] KERNELSU DETECTADO${N}"
+        [ -n "$KSU_BIN" ] && log_output "${Y}  ksud: $KSU_BIN${N}"
+        ((SUSPICIOUS_COUNT+=3)); BYPASS_FOUND=1
+    fi
+
+    # KernelSU Next
+    KSUNEXT_DIR=$(adb shell "ls /data/adb/ksunext 2>/dev/null && echo found" | tr -d '\r')
+    if echo "$KSUNEXT_DIR" | grep -q "found"; then
+        log_output "${R}[!] KERNELSU NEXT DETECTADO (/data/adb/ksunext)${N}"
         ((SUSPICIOUS_COUNT+=3)); BYPASS_FOUND=1
     fi
 
@@ -1566,6 +1658,25 @@ check_suspicious_packages() {
             log_output "${R}[!] Instalador sospechoso: $INSTALLER${N}"; ((SUSPICIOUS_COUNT+=2)); FOUND_SUSP=1
         fi
     fi
+
+    # Wrapper — app modificada sin root via wrapper de APK
+    log_output "${B}[+] Verificando wrapper en el juego...${N}"
+    WRAPPER=$(adb shell "pm dump $GAME_PKG 2>/dev/null | grep -i wrapper" | tr -d '\r')
+    if [ -n "$(echo "$WRAPPER" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] WRAPPER DETECTADO — APK modificada mediante wrapper:${N}"
+        echo "$WRAPPER" | head -3 | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_SUSP=1
+    fi
+
+    # Indicadores de APK cracked/modded en pm dump
+    log_output "${B}[+] Verificando indicadores de APK crackeado...${N}"
+    CRACKED=$(adb shell "pm dump $GAME_PKG 2>/dev/null | grep -iE 'cracked|modded|lsposed'" | tr -d '\r')
+    if [ -n "$(echo "$CRACKED" | tr -d '[:space:]')" ]; then
+        log_output "${R}[!] APK CRACKEADO/MODIFICADO DETECTADO:${N}"
+        echo "$CRACKED" | head -3 | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
+        ((SUSPICIOUS_COUNT+=3)); FOUND_SUSP=1
+    fi
+
     [ $FOUND_SUSP -eq 0 ] && log_output "${G}[✓] Sin apps sospechosas${N}"
     echo ""
 }
@@ -2084,170 +2195,4 @@ check_logcat_delta() {
 
     FOUND_LOG=0
 
-    INJECT_LOG=$(echo "$LOG_NUEVO" | grep -iE 'inject|hook|frida|xposed|lsposed|bypass|cheat' | grep -viE 'knox|google|InputDispatcher|injectInputEvent|KeyButtonView|dalvik-internals|hooked signal|hooked sigaction|LogPrintln|Inject motion|Inject key' | head -5)
-    if [ -n "$INJECT_LOG" ]; then
-        log_output "${R}[!] ACTIVIDAD SOSPECHOSA EN LOG DURANTE EL SCAN:${N}"
-        echo "$INJECT_LOG" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
-        ((SUSPICIOUS_COUNT+=3)); FOUND_LOG=1
-    fi
-
-    ROOT_LOG=$(echo "$LOG_NUEVO" | grep -iE 'su: |granted root|superuser|magisk.*allow|access granted' | grep -viE 'knox' | head -3)
-    if [ -n "$ROOT_LOG" ]; then
-        log_output "${R}[!] ACTIVIDAD DE ROOT DURANTE EL SCAN:${N}"
-        echo "$ROOT_LOG" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
-        ((SUSPICIOUS_COUNT+=3)); FOUND_LOG=1
-    fi
-
-    CRASH_LOG=$(echo "$LOG_NUEVO" | grep -iE "FATAL|force.clos|native crash" | grep -i "${GAME_PKG}" | head -3)
-    if [ -n "$CRASH_LOG" ]; then
-        log_output "${Y}[!] Crash del juego durante el scan (posible cheat inestable):${N}"
-        echo "$CRASH_LOG" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
-        ((SUSPICIOUS_COUNT++)); FOUND_LOG=1
-    fi
-
-    [ $FOUND_LOG -eq 0 ] && log_output "${G}[✓] Sin eventos sospechosos nuevos en logcat${N}"
-    echo ""
-}
-
-check_process_delta() {
-    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}     PROCESOS NUEVOS DURANTE EL SCAN (DELTA)            ${C}║${N}"
-    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
-
-    log_output "${B}[+] Comparando procesos inicio vs fin del scan...${N}"
-    PS_SNAPSHOT_FIN=$(adb shell "ps -A 2>/dev/null" | tr -d '\r')
-
-    PIDS_INICIO=$(echo "$PS_SNAPSHOT_INICIO" | awk '{print $2}' | sort)
-    PIDS_FIN=$(echo "$PS_SNAPSHOT_FIN"    | awk '{print $2}' | sort)
-
-    NUEVOS_PIDS=$(comm -13 <(echo "$PIDS_INICIO") <(echo "$PIDS_FIN") 2>/dev/null)
-    FOUND_DELTA=0
-
-    if [ -n "$NUEVOS_PIDS" ]; then
-        while read -r pid; do
-            [ -z "$pid" ] && continue
-            PROC_LINE=$(echo "$PS_SNAPSHOT_FIN" | awk -v p="$pid" '$2==p {print}' | head -1)
-            PROC_NAME=$(echo "$PROC_LINE" | awk '{print $NF}')
-            if echo "$PROC_NAME" | grep -qiE 'frida|hook|cheat|bypass|magisk|xposed|lsposed|shizuku|su$'; then
-                log_output "${R}[!] PROCESO SOSPECHOSO APARECIO DURANTE EL SCAN: $PROC_NAME (PID $pid)${N}"
-                ((SUSPICIOUS_COUNT+=3)); FOUND_DELTA=1
-            fi
-        done <<< "$NUEVOS_PIDS"
-    fi
-
-    [ $FOUND_DELTA -eq 0 ] && log_output "${G}[✓] Sin procesos sospechosos nuevos durante el scan${N}"
-    echo ""
-}
-
-monitor_activo() {
-    local DURACION_MIN=${1:-8}
-    local INTERVALO_SEG=30
-    local TOTAL_SEG=$((DURACION_MIN * 60))
-    local TRANSCURRIDO=0
-    local ALERTAS=0
-
-    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}     MONITOREO ACTIVO DEL DISPOSITIVO                  ${C}║${N}"
-    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
-    log_output "${B}[*] Observando el dispositivo durante ${DURACION_MIN} minutos...${N}"
-    log_output "${B}[*] Intervalo de muestra: ${INTERVALO_SEG} segundos${N}"
-    echo ""
-
-    local LOG_MARCA=$(adb shell "logcat -d -b all 2>/dev/null | wc -l" | tr -d '\r')
-    local PS_BASE=$(adb shell "ps -A 2>/dev/null" | tr -d '\r')
-    local REPLAY_STAT_BASE=$(adb shell "stat '${REPLAY_DIR}' 2>/dev/null" | tr -d '\r')
-
-    local CICLO=0
-    while [ $TRANSCURRIDO -lt $TOTAL_SEG ]; do
-        sleep $INTERVALO_SEG
-        TRANSCURRIDO=$((TRANSCURRIDO + INTERVALO_SEG))
-        CICLO=$((CICLO + 1))
-        local MIN_REST=$(( (TOTAL_SEG - TRANSCURRIDO) / 60 ))
-        local SEG_REST=$(( (TOTAL_SEG - TRANSCURRIDO) % 60 ))
-        echo -ne "
-${B}[*] Muestra $CICLO — Tiempo restante: ${W}${MIN_REST}m ${SEG_REST}s${N}   "
-
-        local LOG_ACTUAL=$(adb shell "logcat -d -b all 2>/dev/null | wc -l" | tr -d '\r')
-        local LOG_NUEVAS=$(( LOG_ACTUAL - LOG_MARCA ))
-        if [ "$LOG_NUEVAS" -gt 0 ] 2>/dev/null; then
-            local LOG_NUEVAS_CONT=$(adb shell "logcat -d -b all 2>/dev/null | tail -n $LOG_NUEVAS" | tr -d '\r')
-            local SUSP_LOG=$(echo "$LOG_NUEVAS_CONT" | grep -iE 'inject|frida|hook|bypass|cheat|su: |access granted|magisk.*allow' | grep -viE 'knox|google|InputDispatcher|injectInputEvent|KeyButtonView|dalvik-internals|hooked signal|hooked sigaction|LogPrintln|Inject motion|Inject key' | head -3)
-            if [ -n "$SUSP_LOG" ]; then
-                echo ""
-                log_output "${R}[!] CICLO $CICLO — ACTIVIDAD SOSPECHOSA EN LOG:${N}"
-                echo "$SUSP_LOG" | while read -r l; do [ -n "$l" ] && log_output "${Y}  $l${N}"; done
-                ((SUSPICIOUS_COUNT+=3)); ((ALERTAS++))
-            fi
-            LOG_MARCA=$LOG_ACTUAL
-        fi
-
-        local PS_ACTUAL=$(adb shell "ps -A 2>/dev/null" | tr -d '\r')
-        local PS_DIFF=$(comm -13             <(echo "$PS_BASE" | awk '{print $NF}' | sort)             <(echo "$PS_ACTUAL" | awk '{print $NF}' | sort) 2>/dev/null)
-        local SUSP_PROC=$(echo "$PS_DIFF" | grep -iE 'frida|hook|cheat|bypass|su$|xposed|lsposed|shizuku' | head -3)
-        if [ -n "$SUSP_PROC" ]; then
-            echo ""
-            log_output "${R}[!] CICLO $CICLO — PROCESO SOSPECHOSO APARECIÓ:${N}"
-            echo "$SUSP_PROC" | while read -r p; do [ -n "$p" ] && log_output "${Y}  $p${N}"; done
-            ((SUSPICIOUS_COUNT+=3)); ((ALERTAS++))
-        fi
-        PS_BASE="$PS_ACTUAL"
-
-        local REPLAY_STAT_ACT=$(adb shell "stat '${REPLAY_DIR}' 2>/dev/null" | tr -d '\r')
-        local RM_ANTES=$(echo "$REPLAY_STAT_BASE" | grep "^Modify:" | head -1)
-        local RM_AHORA=$(echo "$REPLAY_STAT_ACT"  | grep "^Modify:" | head -1)
-        if [ -n "$RM_ANTES" ] && [ "$RM_ANTES" != "$RM_AHORA" ]; then
-            echo ""
-            log_output "${R}[!] CICLO $CICLO — CARPETA MREPLAYS MODIFICADA DURANTE MONITOREO:${N}"
-            log_output "${Y}    Antes: $RM_ANTES${N}"
-            log_output "${Y}    Ahora: $RM_AHORA${N}"
-            ((SUSPICIOUS_COUNT+=5)); ((ALERTAS++))
-        fi
-        REPLAY_STAT_BASE="$REPLAY_STAT_ACT"
-
-        local NET_SUSP=$(adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null" | awk '{print $3}' |             grep -iE ':0438|:69B2|:69B3|:1F90' | head -3 | tr -d '\r')
-        if [ -n "$NET_SUSP" ]; then
-            echo ""
-            log_output "${R}[!] CICLO $CICLO — CONEXION SOSPECHOSA ACTIVA:${N}"
-            echo "$NET_SUSP" | while read -r n; do [ -n "$n" ] && log_output "${Y}  $n${N}"; done
-            ((SUSPICIOUS_COUNT+=2)); ((ALERTAS++))
-        fi
-    done
-
-    echo ""
-    echo ""
-    if [ $ALERTAS -eq 0 ]; then
-        log_output "${G}[✓] Monitoreo completado — sin actividad sospechosa detectada${N}"
-    else
-        log_output "${R}[!] Monitoreo completado — $ALERTAS alerta(s) detectada(s) durante la observacion${N}"
-    fi
-    echo ""
-}
-
-show_summary() {
-    log_output "${C}╔════════════════════════════════════════════════════════╗${N}"
-    log_output "${C}║${W}              RESUMEN DEL ANÁLISIS                     ${C}║${N}"
-    log_output "${C}╚════════════════════════════════════════════════════════╝${N}"
-    log_output "${B}[*] Juego: ${W}$GAME_SELECTED${N}"
-    log_output "${B}[*] Señales sospechosas: ${W}$SUSPICIOUS_COUNT${N}"
-    [ -n "$DEVICE_HWID" ] && log_output "${B}[*] HWID: ${Y}$DEVICE_HWID${N}"
-    echo ""
-
-    if [ $SUSPICIOUS_COUNT -eq 0 ]; then
-        log_output "${G}╔════════════════════════════════════════════════════════╗${N}"
-        log_output "${G}║              ✓ DISPOSITIVO LIMPIO ✓                   ║${N}"
-        log_output "${G}╚════════════════════════════════════════════════════════╝${N}"
-    elif [ $SUSPICIOUS_COUNT -lt 10 ]; then
-        log_output "${Y}╔════════════════════════════════════════════════════════╗${N}"
-        log_output "${Y}║       ⚠  REVISAR MANUALMENTE — NO DAR W.O  ⚠          ║${N}"
-        log_output "${Y}╚════════════════════════════════════════════════════════╝${N}"
-    else
-        log_output "${R}╔════════════════════════════════════════════════════════╗${N}"
-        log_output "${R}║          ✗ ALTO RIESGO DE CHEATS ✗                    ║${N}"
-        log_output "${R}╚════════════════════════════════════════════════════════╝${N}"
-    fi
-
-    log_output "\n${M}[*] Log: ${W}$LOGFILE${N}"
-}
-
-check_storage
-main_menu
+    INJECT_LOG=$(echo "$LOG_NUEVO" | grep -iE 'inject|hook|frida|xposed|lsposed|bypass|cheat' | grep -viE 'kn
