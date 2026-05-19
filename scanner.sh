@@ -8,23 +8,21 @@ C='\033[1;36m'
 W='\033[1;37m'
 N='\033[0m'
 
-# ─────────────────────────────────────────────────────────────
-# UI helpers — adaptativos al ancho real del terminal
-# ─────────────────────────────────────────────────────────────
+
 COLS=$(tput cols 2>/dev/null); [[ ! "$COLS" =~ ^[0-9]+$ ]] && COLS=60
 [ "$COLS" -gt 66 ] && COLS=66; [ "$COLS" -lt 44 ] && COLS=44
 
-# Línea de N chars con el caracter dado (default ─)
+
 _hl() { local n=$1 c="${2:-─}" s="" i; for((i=0;i<n;i++)); do s+="$c"; done; printf '%s' "$s"; }
-# N espacios
+
 _sp() { printf "%${1}s" ""; }
-# Centrar texto en $inner columnas (retorna string con padding)
+
 _bc() { local t="$1" inner="$2" tl=${#1} lp rp
     lp=$(( (inner-tl)/2 )); rp=$(( inner-tl-lp ))
     [ $lp -lt 0 ] && lp=0; [ $rp -lt 0 ] && rp=0
     printf '%s%s%s' "$(_sp $lp)" "$t" "$(_sp $rp)"; }
 
-# Encabezado de sección → log_output (va al log y pantalla)
+
 sec_hdr() {
     local t="$1" inner=$(( COLS-2 ))
     local pad=$(( inner-2-${#t} )); [ $pad -lt 0 ] && pad=0
@@ -33,7 +31,7 @@ sec_hdr() {
     log_output "${C}└$(_hl $inner)┘${N}"
 }
 
-# Encabezado de sección → echo (solo pantalla, para menús)
+
 echo_hdr() {
     local t="$1" col="${2:-$B}" inner=$(( COLS-2 ))
     local pad=$(( inner-2-${#t} )); [ $pad -lt 0 ] && pad=0
@@ -42,7 +40,7 @@ echo_hdr() {
     echo -e "${col}└$(_hl $inner)┘${N}"
 }
 
-# Caja de veredicto centrada (log_output)
+
 verdict_box() {
     local col="$1" t="$2" inner=$(( COLS-2 ))
     local lp=$(( (inner-${#t})/2 )) rp
