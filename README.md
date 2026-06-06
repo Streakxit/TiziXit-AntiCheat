@@ -14,7 +14,7 @@
 
 ## Introducción
 
-**TiziXit AntiCheat** es un scanner forense para dispositivos Android orientado a la detección de trampas, modificaciones y herramientas de bypass en **Free Fire Normal y MAX**. Ejecutado vía `Termux` con conexión ADB inalámbrica, realiza un análisis profundo del dispositivo en segundos, sin necesidad de root ni acceso físico al teléfono.
+**TiziXit AntiCheat** es un scanner forense para dispositivos Android orientado a la detección de hacks, modificaciones y herramientas de bypass para  **Free Fire Normal y MAX**. Ejecutado vía `Termux` con conexión inalámbrica, realiza un análisis profundo del dispositivo en segundos, sin necesidad de root ni acceso físico al teléfono.
 
 El proyecto es mantenido y desarrollado por **UNKNOWN Security Team** como infraestructura anti-cheat para torneos y comunidades competitivas.
 
@@ -23,7 +23,7 @@ El proyecto es mantenido y desarrollado por **UNKNOWN Security Team** como infra
 ## ¿Por qué usar TiziXit?
 
 - **Automatización total** — El scanner realiza todo el proceso de forma autónoma vía ADB, sin intervención manual del operador.
-- **Cobertura profunda** — Detecta desde herramientas de root y bypass de integridad hasta modificaciones de assets, espejamiento de pantalla y GPS falso.
+- **Cobertura profunda** — Detecta desde herramientas de root y bypass de integridad hasta modificaciones de assets.
 - **Reporte instantáneo** — Genera un log detallado por dispositivo y lo envía automáticamente al backend con veredicto, HWID y señales detectadas.
 - **Panel de administración** — Los resultados son accesibles desde el admin panel con estadísticas, historial y sistema de baneos.
 - **Análisis Premium (BugReport)** — Modo avanzado de análisis a nivel kernel mediante BugReport ZIP, con detección de módulos ocultos, timing ADB y más.
@@ -66,9 +66,8 @@ El proyecto es mantenido y desarrollado por **UNKNOWN Security Team** como infra
 
 ## Requisitos
 
-- **Termux** instalado en un dispositivo Android
-- **ADB** disponible en Termux (`pkg install android-tools`)
-- Dispositivo objetivo con **Depuración Inalámbrica** habilitada (Android 11+)
+- **Termux** instalado en el dispositivo
+- Dispositivo objetivo con **Depuración Inalámbrica** habilitada
 - Conexión a la misma red WiFi que el dispositivo a analizar
 
 <img src="https://i.imgur.com/NnWf7Fm.png" width="100%" height="3px">
