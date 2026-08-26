@@ -2,7 +2,7 @@
 
 <img src="https://i.imgur.com/NnWf7Fm.png" width="100%" height="3px">
 
-# TiziXit AntiCheat — UNKNOWN Scanner
+# TiziSS AntiCheat — UNKNOWN Scanner
 
 <p align="center">
   <em>Desarrollado para la comunidad de Free Fire, por UNKNOWN Security Team.</em>
